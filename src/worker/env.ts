@@ -1,4 +1,6 @@
 
+import type { OAuthHelpers } from '@cloudflare/workers-oauth-provider'
+
 export interface Env {
 
   DB: D1Database
@@ -9,11 +11,22 @@ export interface Env {
 
   FILES_KV?: KVNamespace
 
+  OAUTH_KV: KVNamespace
+
+  OAUTH_PROVIDER?: OAuthHelpers
+
   SYNC_HUB?: DurableObjectNamespace
 
   CREDENTIAL_VAULT?: DurableObjectNamespace
 
   APP_NAME?: string
+
+  PUBLIC_URL?: string
+
+  /** Workers AI binding for semantic search; optional so AI search degrades gracefully. */
+  AI?: {
+    run: <T = unknown>(model: string, inputs: unknown) => Promise<T>
+  }
 }
 
 export interface DatabaseState {

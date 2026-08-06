@@ -10,6 +10,9 @@ import type {
   GraphResponse,
   ImportResult,
   ListNotesResponse,
+  McpAiSearchStatus,
+  McpApiKey,
+  McpSettingsInfo,
   Note,
   NoteVersion,
   NoteVersionMeta,
@@ -265,7 +268,8 @@ export const api = {
     remove: (id: string) => request<Note>(`/api/notes/${id}`, { method: 'DELETE' }),
     restore: (id: string) => request<Note>(`/api/notes/${id}/restore`, { method: 'POST' }),
     purge: (id: string) => request<{ ok: true; cursor: number }>(`/api/notes/${id}/purge`, { method: 'DELETE' }),
-    duplicate: (id: string) => request<Note>(`/api/notes/${id}/duplicate`, { method: 'POST' }),
+    duplicate: (id: string, body: { id?: string } = {}) =>
+      request<Note>(`/api/notes/${id}/duplicate`, { method: 'POST', body }),
     emptyTrash: () => request<{ purged: number }>('/api/notes/trash/empty', { method: 'POST' }),
     versions: (id: string) => request<{ versions: NoteVersionMeta[] }>(`/api/notes/${id}/versions`),
     version: (id: string, versionId: string) =>
@@ -277,9 +281,14 @@ export const api = {
 
   folders: {
     list: () => request<{ folders: Folder[] }>('/api/folders'),
-    create: (body: { name?: string; parentId?: string | null; icon?: string | null }) =>
+    create: (body: { id?: string; name?: string; parentId?: string | null; icon?: string | null }) =>
       request<Folder>('/api/folders', { method: 'POST', body }),
-    patch: (id: string, body: { name?: string; parentId?: string | null; icon?: string | null }) =>
+    patch: (id: string, body: {
+      name?: string
+      parentId?: string | null
+      beforeId?: string | null
+      icon?: string | null
+    }) =>
       request<Folder>(`/api/folders/${id}`, { method: 'PATCH', body }),
     remove: (id: string, strategy: 'move-up' | 'delete' = 'move-up') =>
       request<{ ok: true }>(`/api/folders/${id}?strategy=${strategy}`, { method: 'DELETE' }),
@@ -338,6 +347,33 @@ export const api = {
         return settings
       }),
     stats: () => request<Record<string, number>>('/api/settings/stats'),
+  },
+
+  mcp: {
+    get: () => request<McpSettingsInfo>('/api/mcp'),
+    save: (body: {
+      enabled?: boolean
+      writeEnabled?: boolean
+      trashEnabled?: boolean
+    }) => request<{
+      enabled: boolean
+      preferences: McpSettingsInfo['preferences']
+      reconnectRequired: boolean
+    }>('/api/mcp', { method: 'PUT', body }),
+    revokeGrant: (id: string) => request<{ ok: true }>(`/api/mcp/grants/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    revokeAllGrants: () => request<{ ok: true; revoked: number }>('/api/mcp/grants/revoke-all', { method: 'POST' }),
+    createKey: (name: string) =>
+      request<{ key: McpApiKey; token: string }>('/api/mcp/keys', { method: 'POST', body: { name } }),
+    revokeKey: (id: string) =>
+      request<{ ok: true }>(`/api/mcp/keys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    aiSearch: {
+      save: (enabled: boolean) =>
+        request<McpAiSearchStatus>('/api/mcp/ai-search', { method: 'PUT', body: { enabled } }),
+      reindex: () =>
+        request<{ ok: true; enqueued: number }>('/api/mcp/ai-search/reindex', { method: 'POST' }),
+      clear: () =>
+        request<{ ok: true; removed: number }>('/api/mcp/ai-search/clear', { method: 'POST' }),
+    },
   },
 
   update: {

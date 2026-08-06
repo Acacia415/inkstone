@@ -9,15 +9,21 @@ import { requireAuth } from '../middleware/auth'
 
 export const syncRoutes = new Hono<AppBindings>()
 
-const FOLDER_SELECT = `f.id, f.parent_id, f.name, f.icon, f.position, f.created_at, f.updated_at,
-  (SELECT COUNT(*) FROM notes n
-     WHERE n.folder_id = f.id AND n.user_id = f.user_id
-       AND n.deleted_at IS NULL AND n.is_archived = 0) AS note_count`
+export const CHANGE_BOUNDS_SQL = `SELECT
+  (SELECT seq FROM changes WHERE user_id = ?1 ORDER BY seq ASC LIMIT 1) AS lo,
+  (SELECT seq FROM changes WHERE user_id = ?1 ORDER BY seq DESC LIMIT 1) AS hi`
+
+const FOLDER_SELECT = `f.id, f.parent_id, f.name, f.icon, f.position, f.created_at, f.updated_at`
 
 const TAG_SELECT = `t.id, t.name, t.color, t.created_at,
-  (SELECT COUNT(*) FROM note_tags nt JOIN notes n ON n.id = nt.note_id
-     WHERE nt.tag_id = t.id AND n.user_id = t.user_id
-       AND n.deleted_at IS NULL AND n.is_archived = 0) AS note_count`
+  COALESCE(nc.count, 0) AS note_count`
+
+const TAG_COUNT_JOIN = `LEFT JOIN (
+  SELECT nt.tag_id, COUNT(*) AS count
+    FROM note_tags nt JOIN notes n ON n.id = nt.note_id
+   WHERE n.user_id = ?1 AND n.deleted_at IS NULL AND n.is_archived = 0
+   GROUP BY nt.tag_id
+) nc ON nc.tag_id = t.id`
 
 
 syncRoutes.get('/', requireAuth, async (c) => {
@@ -25,9 +31,7 @@ syncRoutes.get('/', requireAuth, async (c) => {
   const since = clampInt(c.req.query('since'), 0, Number.MAX_SAFE_INTEGER, 0)
   const after = (c.req.query('after') ?? '').slice(0, 128)
 
-  const bounds = await c.env.DB.prepare(
-    `SELECT MIN(seq) AS lo, MAX(seq) AS hi FROM changes WHERE user_id = ?1`,
-  )
+  const bounds = await c.env.DB.prepare(CHANGE_BOUNDS_SQL)
     .bind(userId)
     .first<{ lo: number | null; hi: number | null }>()
 
@@ -36,7 +40,11 @@ syncRoutes.get('/', requireAuth, async (c) => {
 
 
   const needFull = since <= 0 || (lo > 0 && since < lo - 1)
-  if (needFull) {
+  // A non-empty `after` key always means the caller is mid-way through a
+  // full snapshot page chain; keep serving snapshot pages regardless of
+  // `since`, so following the returned nextKey can never silently drop
+  // remaining pages.
+  if (needFull || after) {
     const requestedSnapshot = clampInt(
       c.req.query('snapshot'),
       0,
@@ -49,7 +57,9 @@ syncRoutes.get('/', requireAuth, async (c) => {
 
   if (since >= hi) {
     const body: SyncResponse = {
-      cursor: hi,
+      // Never move the client's cursor backwards, even if it reported a
+      // seq ahead of the server (e.g. data was trimmed).
+      cursor: Math.max(since, hi),
       full: false,
       hasMore: false,
       nextKey: null,
@@ -114,7 +124,8 @@ syncRoutes.get('/', requireAuth, async (c) => {
     ? (
         await c.env.DB.prepare(
           `SELECT ${FOLDER_SELECT} FROM folders f
-            WHERE f.user_id = ?1 AND f.deleted_at IS NULL ORDER BY f.position ASC`,
+            WHERE f.user_id = ?1 AND f.deleted_at IS NULL
+            ORDER BY f.position ASC, f.created_at ASC, f.id ASC`,
         )
           .bind(userId)
           .all<FolderRow>()
@@ -133,7 +144,8 @@ syncRoutes.get('/', requireAuth, async (c) => {
     ? (
         await c.env.DB.prepare(
           `SELECT ${TAG_SELECT} FROM tags t
-            WHERE t.user_id = ?1 ORDER BY t.name COLLATE NOCASE`,
+            ${TAG_COUNT_JOIN}
+           WHERE t.user_id = ?1 ORDER BY t.name COLLATE NOCASE`,
         )
           .bind(userId)
           .all<TagRow>()
@@ -141,7 +153,8 @@ syncRoutes.get('/', requireAuth, async (c) => {
     : await loadInChunks(tagIds, (ids) =>
         c.env.DB.prepare(
           `SELECT ${TAG_SELECT} FROM tags t
-            WHERE t.user_id = ?1 AND t.id IN (${placeholders(ids.length, 2)})`,
+            ${TAG_COUNT_JOIN}
+           WHERE t.user_id = ?1 AND t.id IN (${placeholders(ids.length, 2)})`,
         )
           .bind(userId, ...ids)
           .all<TagRow>(),
@@ -220,7 +233,9 @@ async function fullSnapshot(
     !after
       ? db
           .prepare(
-            `SELECT ${TAG_SELECT} FROM tags t WHERE t.user_id = ?1 ORDER BY t.name COLLATE NOCASE`,
+            `SELECT ${TAG_SELECT} FROM tags t
+              ${TAG_COUNT_JOIN}
+             WHERE t.user_id = ?1 ORDER BY t.name COLLATE NOCASE`,
           )
           .bind(userId)
           .all<TagRow>()

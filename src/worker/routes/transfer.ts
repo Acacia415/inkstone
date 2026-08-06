@@ -20,6 +20,7 @@ import {
   pruneOrphanTags,
   runBatched,
 } from '../db/writes'
+import { enqueueNoteIndex } from '../mcp/ai-search'
 import {
   assertArchiveCanBeRestored,
   assertBundleCanBeRestored,
@@ -29,7 +30,7 @@ import { sha256Hex } from '../lib/encoding'
 import { ApiError } from '../lib/errors'
 import { isValidId, newId } from '../lib/id'
 import { acquireLease } from '../lib/lease'
-import { broadcastCursor } from '../lib/notify'
+import { broadcastCursor, scheduleFtsDrain } from '../lib/notify'
 import { assertContentSize, FORM_BODY_LIMITS, readFormDataWithinLimit } from '../lib/request'
 import { createZip, readZip, type UnzippedEntry } from '@shared/zip'
 import { requireAuth } from '../middleware/auth'
@@ -219,6 +220,7 @@ transferRoutes.post('/import', async (c) => {
 
   await pruneOrphanTags(c.env.DB, userId)
   await broadcastCursor(c)
+  scheduleFtsDrain(c, 20)
   return c.json(result)
 })
 
@@ -976,6 +978,7 @@ async function updateImportedNote(
   existing.title = title
   existing.rev = nextRev
   existing.updated_at = updatedAt
+  await enqueueNoteIndex(c.env.DB, userId, current.id, 'embed')
   return 'updated'
 }
 
@@ -1068,6 +1071,7 @@ async function insertNote(
   }
   if (!inserted) throw new Error('Could not generate a unique note ID')
 
+  if (!deleted) await enqueueNoteIndex(c.env.DB, userId, id, 'embed')
   return id
 }
 

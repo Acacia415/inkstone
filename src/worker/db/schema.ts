@@ -1,11 +1,17 @@
 /** Defines the idempotent final D1 schema initialized by every Worker isolate. */
 import type { DatabaseState, Env } from '../env'
+import { getMeta, setMeta } from './metadata'
 
 
 export const SCHEMA_STATEMENTS: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS app_meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS schema_migrations (
+    version INTEGER PRIMARY KEY,
+    applied_at INTEGER NOT NULL
   )`,
 
   `CREATE TABLE IF NOT EXISTS users (
@@ -216,6 +222,160 @@ export const SCHEMA_STATEMENTS: readonly string[] = [
     locked_until INTEGER
   )`,
   `CREATE INDEX IF NOT EXISTS idx_login_attempts_last_fail ON login_attempts(last_fail_at)`,
+
+  `CREATE TABLE IF NOT EXISTS mcp_preferences (
+    user_id TEXT PRIMARY KEY,
+    write_enabled INTEGER NOT NULL DEFAULT 1 CHECK (write_enabled IN (0, 1)),
+    trash_enabled INTEGER NOT NULL DEFAULT 0 CHECK (trash_enabled IN (0, 1)),
+    updated_at INTEGER NOT NULL
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS mcp_operations (
+    user_id TEXT NOT NULL,
+    operation_id TEXT NOT NULL,
+    tool TEXT NOT NULL,
+    request_hash TEXT NOT NULL,
+    response_json TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, operation_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_mcp_operations_created
+     ON mcp_operations(created_at)`,
+
+  `CREATE TABLE IF NOT EXISTS mcp_api_keys (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    key_hash TEXT NOT NULL UNIQUE,
+    scopes TEXT NOT NULL DEFAULT 'notes:read',
+    created_at INTEGER NOT NULL,
+    last_used_at INTEGER,
+    revoked_at INTEGER
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_mcp_api_keys_user
+     ON mcp_api_keys(user_id, revoked_at)`,
+
+  `CREATE TABLE IF NOT EXISTS ai_note_embeddings (
+    user_id TEXT NOT NULL,
+    note_id TEXT NOT NULL,
+    model TEXT NOT NULL,
+    vector BLOB NOT NULL,
+    indexed_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, note_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_ai_embeddings_indexed
+     ON ai_note_embeddings(user_id, indexed_at)`,
+
+  `CREATE TABLE IF NOT EXISTS ai_index_queue (
+    user_id TEXT NOT NULL,
+    note_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('embed', 'delete')),
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, note_id)
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS fts_index_queue (
+    user_id TEXT NOT NULL,
+    note_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('upsert', 'delete')),
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, note_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_fts_index_queue_due
+     ON fts_index_queue(user_id, created_at, note_id)`,
+]
+
+interface SchemaMigration {
+  version: number
+  statements: readonly string[]
+}
+
+const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
+  {
+    // Explicit whitelist (not a regex over SCHEMA_STATEMENTS) so later
+    // additions like mcp_api_keys can never be picked up accidentally.
+    version: 1,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS schema_migrations (
+         version INTEGER PRIMARY KEY,
+         applied_at INTEGER NOT NULL
+       )`,
+      `CREATE TABLE IF NOT EXISTS mcp_preferences (
+         user_id TEXT PRIMARY KEY,
+         write_enabled INTEGER NOT NULL DEFAULT 1 CHECK (write_enabled IN (0, 1)),
+         trash_enabled INTEGER NOT NULL DEFAULT 0 CHECK (trash_enabled IN (0, 1)),
+         updated_at INTEGER NOT NULL
+       )`,
+      `CREATE TABLE IF NOT EXISTS mcp_operations (
+         user_id TEXT NOT NULL,
+         operation_id TEXT NOT NULL,
+         tool TEXT NOT NULL,
+         request_hash TEXT NOT NULL,
+         response_json TEXT NOT NULL,
+         created_at INTEGER NOT NULL,
+         PRIMARY KEY (user_id, operation_id)
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_mcp_operations_created
+         ON mcp_operations(created_at)`,
+    ],
+  },
+  {
+    // Only CREATE TABLE / INDEX statements: D1 does not reliably support
+    // ALTER TABLE ADD COLUMN with constraints, so the AI search preference
+    // lives in app_meta (key `ai-search-enabled:<userId>`) instead of a
+    // new column on the pre-existing mcp_preferences table.
+    version: 2,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS mcp_api_keys (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        key_hash TEXT NOT NULL UNIQUE,
+        scopes TEXT NOT NULL DEFAULT 'notes:read',
+        created_at INTEGER NOT NULL,
+        last_used_at INTEGER,
+        revoked_at INTEGER
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_mcp_api_keys_user
+         ON mcp_api_keys(user_id, revoked_at)`,
+      `CREATE TABLE IF NOT EXISTS ai_note_embeddings (
+        user_id TEXT NOT NULL,
+        note_id TEXT NOT NULL,
+        model TEXT NOT NULL,
+        vector BLOB NOT NULL,
+        indexed_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, note_id)
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_ai_embeddings_indexed
+         ON ai_note_embeddings(user_id, indexed_at)`,
+      `CREATE TABLE IF NOT EXISTS ai_index_queue (
+        user_id TEXT NOT NULL,
+        note_id TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('embed', 'delete')),
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, note_id)
+      )`,
+    ],
+  },
+  {
+    version: 3,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS fts_index_queue (
+        user_id TEXT NOT NULL,
+        note_id TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('upsert', 'delete')),
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, note_id)
+      )`,
+    ],
+  },
+  {
+    version: 4,
+    statements: [
+      `CREATE INDEX IF NOT EXISTS idx_fts_index_queue_due
+         ON fts_index_queue(user_id, created_at, note_id)`,
+    ],
+  },
 ]
 
 const FTS_STATEMENT = `CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
@@ -225,6 +385,8 @@ const FTS_STATEMENT = `CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
   body,
   tokenize = "unicode61 remove_diacritics 2"
 )`
+
+const DATABASE_STATE_KEY = 'database-state-v1'
 
 const REQUIRED_USER_COLUMNS = [
   'id',
@@ -255,6 +417,7 @@ const REQUIRED_ATTACHMENT_COLUMNS = [
 
 const REQUIRED_TABLES = [
   'app_meta',
+  'schema_migrations',
   'users',
   'folders',
   'notes',
@@ -272,6 +435,12 @@ const REQUIRED_TABLES = [
   'changes',
   'sessions',
   'login_attempts',
+  'mcp_preferences',
+  'mcp_operations',
+  'mcp_api_keys',
+  'ai_note_embeddings',
+  'ai_index_queue',
+  'fts_index_queue',
 ] as const
 
 const REQUIRED_INDEXES = [
@@ -300,6 +469,10 @@ const REQUIRED_INDEXES = [
   'idx_sessions_user',
   'idx_sessions_expires',
   'idx_login_attempts_last_fail',
+  'idx_mcp_operations_created',
+  'idx_mcp_api_keys_user',
+  'idx_ai_embeddings_indexed',
+  'idx_fts_index_queue_due',
 ] as const
 
 
@@ -318,24 +491,78 @@ export function initializeDatabase(env: Env): Promise<DatabaseState> {
 }
 
 async function createSchema(db: D1Database): Promise<DatabaseState> {
+  const stored = await readStoredDatabaseState(db)
+  if (stored) return stored
+
   const initialized = await db
     .prepare(`SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'users'`)
     .first<{ present: number }>()
   if (!initialized) {
     await db.batch(SCHEMA_STATEMENTS.map((statement) => db.prepare(statement)))
   }
+  await applyMigrations(db)
   await assertFinalSchema(db)
 
+  let state: DatabaseState
   try {
     await db.prepare(FTS_STATEMENT).run()
-    return { ftsEnabled: true }
+    state = { ftsEnabled: true }
   } catch (error) {
     console.warn(
       '[inkstone] The current database does not support FTS5; search will use LIKE:',
       error instanceof Error ? error.message : error,
     )
-    return { ftsEnabled: false }
+    state = { ftsEnabled: false }
   }
+  if (state.ftsEnabled) {
+    await setMeta(db, DATABASE_STATE_KEY, JSON.stringify({
+      schema: schemaFingerprint(),
+      ftsEnabled: true,
+    }))
+  }
+  return state
+}
+
+async function applyMigrations(db: D1Database): Promise<void> {
+  await db.prepare(
+    `CREATE TABLE IF NOT EXISTS schema_migrations (
+       version INTEGER PRIMARY KEY,
+       applied_at INTEGER NOT NULL
+     )`,
+  ).run()
+  const { results } = await db.prepare(`SELECT version FROM schema_migrations`).all<{ version: number }>()
+  const applied = new Set(results.map((row) => row.version))
+
+  for (const migration of SCHEMA_MIGRATIONS) {
+    if (applied.has(migration.version)) continue
+    const statements = migration.statements.map((statement) => db.prepare(statement))
+    statements.push(
+      db.prepare(`INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?1, ?2)`)
+        .bind(migration.version, Date.now()),
+    )
+    await db.batch(statements)
+  }
+}
+
+async function readStoredDatabaseState(db: D1Database): Promise<DatabaseState | null> {
+  try {
+    const raw = await getMeta(db, DATABASE_STATE_KEY)
+    if (!raw) return null
+    const value = JSON.parse(raw) as { schema?: unknown; ftsEnabled?: unknown }
+    if (value.schema !== schemaFingerprint() || value.ftsEnabled !== true) return null
+    return { ftsEnabled: true }
+  } catch {
+    return null
+  }
+}
+
+function schemaFingerprint(): string {
+  const source = [...SCHEMA_STATEMENTS, FTS_STATEMENT].join('\n')
+  let hash = 0x811c9dc5
+  for (let index = 0; index < source.length; index++) {
+    hash = Math.imul(hash ^ source.charCodeAt(index), 0x01000193)
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0')
 }
 
 async function assertFinalSchema(db: D1Database): Promise<void> {
@@ -346,7 +573,7 @@ async function assertFinalSchema(db: D1Database): Promise<void> {
   const missingTables = REQUIRED_TABLES.filter((table) => !tables.has(table))
   if (missingTables.length) {
     throw new Error(
-      `The database does not match the current schema (missing tables: ${missingTables.join(', ')}). This pre-release build does not run migrations; clear the database and restart`,
+      `The database migration did not produce the required tables: ${missingTables.join(', ')}`,
     )
   }
 
@@ -357,7 +584,7 @@ async function assertFinalSchema(db: D1Database): Promise<void> {
   const missingIndexes = REQUIRED_INDEXES.filter((index) => !indexes.has(index))
   if (missingIndexes.length) {
     throw new Error(
-      `The database does not match the current schema (missing indexes: ${missingIndexes.join(', ')}). This pre-release build does not run migrations; clear the database and restart`,
+      `The database migration did not produce the required indexes: ${missingIndexes.join(', ')}`,
     )
   }
 
@@ -370,7 +597,7 @@ async function assertFinalSchema(db: D1Database): Promise<void> {
     const missing = required.filter((column) => !columns.has(column))
     if (missing.length) {
       throw new Error(
-        `The database does not match the current schema (${table} is missing ${missing.join(', ')}). This pre-release build does not run migrations; clear the database and restart`,
+        `The database schema is incompatible (${table} is missing ${missing.join(', ')})`,
       )
     }
   }
