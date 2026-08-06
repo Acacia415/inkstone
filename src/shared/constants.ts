@@ -18,7 +18,7 @@ export const LIMITS = {
   folderNameMaxLength: 120,
   tagNameMaxLength: 60,
   folderDepthMax: 12,
-  attachmentMaxBytes: 10 * 1024 * 1024,
+  attachmentMaxBytes: 25 * 1024 * 1024,
   importFilesMax: 100,
   importUploadMaxBytes: 32 * 1024 * 1024,
   importBundleMaxBytes: 24 * 1024 * 1024,
