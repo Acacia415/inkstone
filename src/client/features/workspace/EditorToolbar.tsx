@@ -6,8 +6,9 @@ import { Menu, Tooltip, type MenuItem } from '../../components/overlay';
 import { cn } from '../../lib/cn';
 import { insertAdvancedCodeBlock, insertBlockId, insertCallout, insertCodeBlock, insertDefinitionList, insertDetails, insertFootnote, insertFrontMatter, insertHorizontalRule, insertImage, insertLink, insertMermaid, insertPandocAttributes, insertTable, insertTabs, insertTag, insertText, setHeading, toggleBlockReference, toggleBold, toggleBulletList, toggleHighlight, toggleInlineCode, toggleInlineMath, toggleInserted, toggleItalic, toggleNoteEmbed, toggleOrderedList, toggleQuote, toggleStrikethrough, toggleSubscript, toggleSuperscript, toggleTaskList, toggleWikiLink, } from '../../editor/commands';
 import { t } from "../../lib/i18n";
-export function EditorToolbar({ view, onPickImage, mobile = false, }: {
-    view: EditorView | null;
+export function EditorToolbar({ runCommand, view, onPickImage, mobile = false, }: {
+    runCommand?: (command: (target: EditorView) => boolean) => void;
+    view?: EditorView | null;
     onPickImage: () => void;
     mobile?: boolean;
 }) {
@@ -20,6 +21,10 @@ export function EditorToolbar({ view, onPickImage, mobile = false, }: {
         setOpenMenu((current) => current === menu ? null : menu);
     };
     const run = (command: (target: EditorView) => boolean) => () => {
+        if (runCommand) {
+            runCommand(command);
+            return;
+        }
         if (!view)
             return;
         command(view);

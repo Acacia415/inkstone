@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, ArrowDownWideNarrow, CheckSquare2, Copy, FolderInput, MoreHorizontal, Pin, PinOff, PanelLeft, Plus, RotateCcw, Search, Star, StarOff, Trash2, X, } from 'lucide-react';
+import { Archive, ArrowDownWideNarrow, CheckSquare2, Columns2, Copy, FileCode, FileDown, FileText, FolderInput, MoreHorizontal, Pin, PinOff, PanelLeft, Plus, RotateCcw, Search, Star, StarOff, Trash2, X, } from 'lucide-react';
 import type { NoteSummary, SortKey, ViewKind } from '@shared/types';
 import { cn } from '../../lib/cn';
 import { shortTime, groupLabel } from '../../lib/time';
@@ -7,6 +7,7 @@ import { useNow } from '../../lib/hooks';
 import { fuzzyFilter, splitByRanges } from '../../lib/fuzzy';
 import { useBreakpoint } from '../../lib/hooks';
 import { prettyCombo } from '../../lib/hotkeys';
+import { exportNoteAsHtml, exportNoteAsMarkdown, exportNoteAsPdf } from '../../lib/export-note';
 import { IconButton } from '../../components/primitives';
 import { Menu, Tooltip, confirm, useContextMenu, type MenuItem } from '../../components/overlay';
 import { Empty, NoteListSkeleton } from '../../components/feedback';
@@ -203,7 +204,10 @@ const NoteRow = memo(function NoteRow({ note, highlight, density, now, onRangeSe
     onRangeSelect: (noteId: string) => void;
 }) {
     const breakpoint = useBreakpoint();
+    const locale = useLocale();
+    const toast = useUi((s) => s.toast);
     const active = useUi((s) => s.activeNoteId === note.id);
+    const openInSecondary = useUi((s) => s.workspaceSecondaryNoteId === note.id);
     const selectedIds = useUi((s) => s.selectedIds);
     const selected = selectedIds.includes(note.id);
     const selectionHighlighted = selected && (selectedIds.length > 1 || !active);
@@ -241,6 +245,36 @@ const NoteRow = memo(function NoteRow({ note, highlight, density, now, onRangeSe
             setPurging(false);
         }
     };
+    const exportNote = async (format: 'md' | 'html' | 'pdf') => {
+        const state = useNotes.getState();
+        let content = state.contents[note.id];
+        if (content === undefined) {
+            await state.openNote(note.id);
+            content = useNotes.getState().contents[note.id];
+            if (content === undefined) {
+                toast({ title: t("common.export_failed"), tone: 'danger' });
+                return;
+            }
+        }
+        const payload = { title: note.title, content };
+        if (format === 'md') {
+            exportNoteAsMarkdown(payload);
+            return;
+        }
+        try {
+            if (format === 'html')
+                await exportNoteAsHtml(payload, locale);
+            else
+                await exportNoteAsPdf(payload, locale);
+        }
+        catch (err) {
+            toast({
+                title: t("common.export_failed"),
+                description: err instanceof Error ? err.message : String(err),
+                tone: 'danger',
+            });
+        }
+    };
     const items: MenuItem[] = inTrash
         ? [
             { id: 'restore', label: t("common.restore"), icon: <RotateCcw size={13}/>, onSelect: () => void restoreNote(note.id) },
@@ -255,6 +289,12 @@ const NoteRow = memo(function NoteRow({ note, highlight, density, now, onRangeSe
             },
         ]
         : [
+            ...(breakpoint === 'desktop' ? [{
+                id: 'open-side',
+                label: t("notes.open_to_side"),
+                icon: <Columns2 size={13}/>,
+                onSelect: () => void openNote(note.id, { pane: 'secondary' }),
+            } satisfies MenuItem] : []),
             ...(breakpoint === 'mobile' ? [{
                 id: 'multi-select',
                 label: t("notes.add_to_selection"),
@@ -279,6 +319,7 @@ const NoteRow = memo(function NoteRow({ note, highlight, density, now, onRangeSe
             {
                 id: 'archive',
                 label: note.isArchived ? t("common.unarchive") : t("navigation.archive"),
+                icon: <Archive size={13}/>,
                 onSelect: () => void patchNote(note.id, { isArchived: !note.isArchived }),
             },
             ...folders.slice(0, 6).map<MenuItem>((folder, index) => ({
@@ -289,6 +330,9 @@ const NoteRow = memo(function NoteRow({ note, highlight, density, now, onRangeSe
                 disabled: folder.id === note.folderId,
                 onSelect: () => void patchNote(note.id, { folderId: folder.id }),
             })),
+            { id: 'export-md', label: t("workspace.export_markdown"), icon: <FileText size={13}/>, separatorBefore: true, onSelect: () => void exportNote('md') },
+            { id: 'export-html', label: t("workspace.export_html"), icon: <FileCode size={13}/>, onSelect: () => void exportNote('html') },
+            { id: 'export-pdf', label: t("workspace.export_pdf"), icon: <FileDown size={13}/>, onSelect: () => void exportNote('pdf') },
             {
                 id: 'delete',
                 label: t("common.move_to_trash"),
@@ -304,6 +348,11 @@ const NoteRow = memo(function NoteRow({ note, highlight, density, now, onRangeSe
             e.dataTransfer.setData('application/x-inkstone-note', note.id);
             e.dataTransfer.effectAllowed = 'move';
         }} onClick={(event) => {
+            if (event.altKey && breakpoint === 'desktop') {
+                event.preventDefault();
+                void openNote(note.id, { pane: 'secondary' });
+                return;
+            }
             if (event.metaKey || event.ctrlKey) {
                 toggleSelected(note.id, true);
                 return;
@@ -317,10 +366,12 @@ const NoteRow = memo(function NoteRow({ note, highlight, density, now, onRangeSe
         }} onContextMenu={(event) => {
             setMenuOpen(false);
             menu.onContextMenu(event);
-        }} className={cn('group relative cursor-default rounded-[var(--r-md)] border border-transparent px-2.5 pr-11 transition-[background-color,border-color,box-shadow] duration-[var(--dur-fast)] md:pr-2.5', density === 'compact' ? 'py-[7px]' : 'py-2.5', selectionHighlighted
+        }} className={cn('group relative cursor-default rounded-[var(--r-md)] border border-transparent px-2.5 pr-11 transition-[background-color,border-color,box-shadow] duration-[var(--dur-fast)] md:pr-10', density === 'compact' ? 'py-[7px]' : 'py-2.5', selectionHighlighted
             ? 'bg-[var(--accent-soft)] ring-1 ring-[var(--accent)]/40'
             : active
                 ? 'border-[var(--border-default)] bg-[var(--bg-surface)] shadow-[var(--shadow-sm)]'
+                : openInSecondary
+                    ? 'border-[var(--accent)]/35 bg-[var(--accent-soft)]/45'
                 : 'hover:bg-[var(--bg-hover)]')}>
         <div className="flex items-start gap-1.5">
           <div className="min-w-0 flex-1">
@@ -357,6 +408,14 @@ const NoteRow = memo(function NoteRow({ note, highlight, density, now, onRangeSe
             </div>
           </div>
         </div>
+        {breakpoint === 'desktop' && (<Tooltip label={t("notes.open_to_side")} side="left">
+            <IconButton label={t("notes.open_to_side")} size="sm" active={openInSecondary} onClick={(event) => {
+                  event.stopPropagation();
+                  void openNote(note.id, { pane: 'secondary' });
+              }} className="absolute top-1.5 right-1.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100" >
+              <Columns2 size={14}/>
+            </IconButton>
+          </Tooltip>)}
         {breakpoint === 'mobile' && (<Tooltip label={t("common.more_actions")} side="left">
             <IconButton ref={menuButtonRef} label={t("common.more_actions")} size="sm" onClick={(event) => {
                   event.stopPropagation();

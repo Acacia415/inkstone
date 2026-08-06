@@ -115,6 +115,28 @@ export const EN_US_MESSAGES = {
     "command.switch_to_light_theme": "Switch to light theme",
     "command.triggered_as_you_type": "Triggered as you type",
     "command.use_nearly_every_action_without_touching_the_mouse": "Use nearly every action without touching the mouse",
+    "attachments.cleanup": "Clean up unreferenced",
+    "attachments.cleanup_confirm": "Clean up unreferenced attachments?",
+    "attachments.cleanup_confirm_description": "Only attachments that no longer appear in any note body will be deleted. This cannot be undone.",
+    "attachments.cleanup_failed": "Cleanup failed",
+    "attachments.cleaned_value0": "Cleaned up {value0} attachments",
+    "attachments.delete": "Delete attachment",
+    "attachments.delete_confirm_value0": "Delete attachment \"{value0}\"?",
+    "attachments.delete_failed": "Could not delete attachment",
+    "attachments.deleted": "Attachment deleted",
+    "attachments.empty": "No attachments yet. Paste or drag an image into a note to upload one.",
+    "attachments.filter_all": "All",
+    "attachments.filter_documents": "Documents",
+    "attachments.filter_images": "Images",
+    "attachments.filter_other": "Other",
+    "attachments.freed_value0": "Freed {value0}",
+    "attachments.manage": "Manage attachments",
+    "attachments.manage_description": "View, filter, and delete every uploaded attachment.",
+    "attachments.none_match": "No matching attachments",
+    "attachments.nothing_to_clean": "No attachments to clean up",
+    "attachments.referenced_value0": "{value0} references",
+    "attachments.total_value0": "{value0} attachments",
+    "attachments.unreferenced": "Unreferenced",
     "common.about": "About ",
     "common.access_control": "Access control",
     "common.access_passcode": "Access passcode",
@@ -299,6 +321,7 @@ export const EN_US_MESSAGES = {
     "notes.offline_modifications_have_been_restored_as_a_new_note": "Offline modifications have been restored as a new note.",
     "notes.open_a_copy": "Open a copy",
     "notes.open_navigation": "Open navigation",
+    "notes.open_to_side": "Open to side",
     "notes.other": "Other",
     "notes.permanent_deletion_failed": "Permanent deletion failed",
     "notes.permanent_deletion_was_canceled_because_the_note_body_is_not_safely_sync": "Permanent deletion was canceled because the note body is not safely synced",
@@ -531,7 +554,7 @@ export const EN_US_MESSAGES = {
     "settings.look_at_home_together": "look at home together.",
     "settings.maintenance": "Maintenance",
     "settings.manual": "Manual",
-    "settings.mcp": "AI & MCP",
+    "settings.mcp": "MCP",
     "settings.mcp_ai_search": "AI semantic search",
     "settings.mcp_ai_search_clear": "Clear index",
     "settings.mcp_ai_search_clear_desc": "Removes every stored vector for this account and cancels pending indexing. Search falls back to keywords until you rebuild the index.",
@@ -569,6 +592,8 @@ export const EN_US_MESSAGES = {
     "settings.mcp_copied": "Copied",
     "settings.mcp_copy": "Copy",
     "settings.mcp_disabled": "Disabled",
+    "settings.mcp_demo_desc": "This page mirrors a configured Inkstone server so you can inspect every MCP option. The endpoint, credentials, clients, and index statistics are examples; all MCP actions are disabled in the demo.",
+    "settings.mcp_demo_title": "Display-only MCP preview",
     "settings.mcp_enable": "Enable MCP",
     "settings.mcp_enable_desc": "Controls the remote MCP service for every account. Existing grants stop working while it is disabled.",
     "settings.mcp_endpoint": "Remote MCP endpoint",
@@ -783,6 +808,7 @@ export const EN_US_MESSAGES = {
     "shell.quick_open": "Quick open",
     "shell.resize_navigation_panel": "Resize navigation panel",
     "shell.resize_note_list": "Resize note list",
+    "shell.resize_note_panes": "Resize note panes",
     "shell.save_now": "Save now",
     "shell.saving": "Saving…",
     "shell.search_all_notes": "Search all notes",
@@ -815,6 +841,21 @@ export const EN_US_MESSAGES = {
     "sidebar.switch_to_light": "Switch to light",
     "sidebar.the_value0_notes_inside_move_up_one_level_and_are_not_deleted": "The {value0} notes inside move up one level and are not deleted.",
     "sidebar.this_folder_is_empty": "This folder is empty.",
+    "tags.change_color": "Change color",
+    "tags.clear_color": "Clear color",
+    "tags.color_failed": "Could not update color",
+    "tags.delete": "Delete tag",
+    "tags.delete_confirm_value0": "Delete tag \"{value0}\"? It will also be removed from the related note bodies.",
+    "tags.delete_failed": "Could not delete tag",
+    "tags.deleted": "Tag deleted",
+    "tags.empty_search": "No matching tags",
+    "tags.invalid_name": "Tag names cannot contain spaces or #",
+    "tags.manage": "Manage tags",
+    "tags.rename": "Rename",
+    "tags.rename_failed": "Could not rename tag",
+    "tags.renamed": "Tag renamed",
+    "tags.search_placeholder": "Search tags…",
+    "tags.total_value0": "{value0} tags",
     "time.just_now": "Just now",
     "time.this_month": "This month",
     "time.this_week": "This week",
@@ -827,6 +868,7 @@ export const EN_US_MESSAGES = {
     "workspace.block_reference": "Block reference",
     "workspace.callout": "Callout",
     "workspace.characters": " characters",
+    "workspace.close_right_note": "Close right note",
     "workspace.choose_a_note_or_write_a_new_one": "Choose a note, or write a new one",
     "workspace.code_block": "Code block",
     "workspace.definition_list": "Definition list",
@@ -835,6 +877,11 @@ export const EN_US_MESSAGES = {
     "workspace.divider": "Divider",
     "workspace.edit_only": "Edit only",
     "workspace.enhanced_code_block": "Enhanced code block",
+    "workspace.export": "Export",
+    "workspace.export_failed": "Export failed",
+    "workspace.export_html": "Export as HTML",
+    "workspace.export_markdown": "Export as Markdown",
+    "workspace.export_pdf": "Export as PDF",
     "workspace.footnote": "Footnote",
     "workspace.heading_value0": "Heading {value0}",
     "workspace.inline_math": "Inline math",
@@ -844,6 +891,7 @@ export const EN_US_MESSAGES = {
     "workspace.large_content_using_a_faster_comparison": "Large content · using a faster comparison",
     "workspace.latest": "Latest",
     "workspace.layout": "Layout",
+    "workspace.left_note_pane": "Left note pane",
     "workspace.link": "Link",
     "workspace.loading_note_content": "Loading note content",
     "workspace.note_title": "Note title",
@@ -863,6 +911,7 @@ export const EN_US_MESSAGES = {
     "workspace.preview_only": "Preview only",
     "workspace.remote_image": "Remote image",
     "workspace.resize_editor_and_preview_panes": "Resize editor and preview panes",
+    "workspace.right_note_pane": "Right note pane",
     "workspace.restore_this_version": "Restore this version?",
     "workspace.restore_this_version_da5169": "Restore this version",
     "workspace.restored_to_selected_version": "Restored to selected version",
@@ -887,8 +936,12 @@ aliases:
 
 # Welcome to Inkstone
 
-> [!TIP] Three things to know first
-> This is your private Markdown notebook. It saves automatically and keeps working offline.
+> [!TIP] Five things to know first
+> - This is your private Markdown notebook; note bodies always remain plain text.
+> - Content saves automatically, remains editable offline, and uploads after reconnection.
+> - Common create, move, organize, and delete actions take effect locally first and roll back safely if persistence fails.
+> - The title at the top of a note is independently editable and does not have to match the first body line.
+> - MCP is entirely optional and requires account authorization before it can read notes.
 
 Use the left side to organize notes, the center to edit plain Markdown, and the right side for live preview. There is no proprietary document format: every \`.md\` file in a backup opens in any text editor.
 
@@ -899,6 +952,11 @@ Use the left side to organize notes, the center to edit plain Markdown, and the 
 - [ ] Select text and press \`Ctrl + B\` to make it bold
 - [ ] Press \`Ctrl + K\` to open the command palette
 - [ ] Add a \`#tag\`, or click [[My first note]] to create a linked note
+- [ ] Click the title above this note and give it a name different from the body
+- [ ] Create a subfolder, then drag it into another folder or sibling position
+- [ ] Alt-click another note, or choose **Open to side**, to work with two notes at once
+- [ ] Install Inkstone as an offline-capable PWA under **Settings → About**
+- [ ] Open **Settings → MCP** to review private AI connections and permissions
 - [ ] Add a backup target under **Settings → Backup**
 - [ ] Create a password-protected share for a note
 
@@ -927,14 +985,29 @@ Use the left side to organize notes, the center to edit plain Markdown, and the 
 
 ::: tabs
 @tab Writing
-Source editing, live preview, synchronized scrolling, focus and typewriter modes, an outline, and version history.
+Independent titles, source editing, live preview, synchronized scrolling, focus and typewriter modes, an outline, and version history.
 
 @tab Organization
-Nested folders, inline \`#tags\`, \`[[wiki links]]\`, backlinks, a graph, and full-text search.
+Twelve levels of drag-sortable folders, inline \`#tags\`, \`[[wiki links]]\`, backlinks, a graph, and full-text search. On desktop, open a second note to the side and choose edit, split, or preview independently in each active group. Deleting a folder promotes its children and moves direct notes to the parent.
+
+@tab Search & AI
+Keyboard command-palette navigation, keyword search, and optional Workers AI semantic/hybrid search. Every account has a separate index, with automatic keyword fallback when AI is unavailable.
 
 @tab Safety & backup
-Self-hosting, offline editing, and multi-device sync. Back up to several WebDAV or S3 targets and export readable Markdown plus a complete JSON archive.
+Self-hosting, an installable PWA, offline editing, multi-device sync, and conflict copies. Back up to several WebDAV or S3 targets and export readable Markdown, attachments, and complete structured data.
 :::
+
+## Private MCP (optional)
+
+Under **Settings → MCP**, the owner can enable the remote MCP service and each account can separately decide whether to allow writes or moves to trash:
+
+- Full MCP clients such as Codex and Claude Code authorize through OAuth 2.1 with PKCE. You can revoke one client or every grant at any time.
+- Scripts and minimal clients without OAuth can use an \`ink_...\` API key. A key is shown once, stored only as a hash, and can be revoked at any time.
+- MCP can search, read bounded ranges, inspect outlines/folders/tags/links, and—with explicit permission—safely create, edit, organize, trash, or restore notes. Permanent purge is never exposed.
+- With Workers AI configured, Inkstone builds a per-account semantic index and combines semantic and keyword results. The index can be rebuilt or cleared, and content changes are indexed in the background.
+
+> [!WARNING] Check an external AI client's privacy policy before connecting
+> Inkstone isolates accounts and enforces permissions, but content an authorized client actually reads is then processed by that client.
 
 ## Markdown quick reference
 
@@ -1046,7 +1119,9 @@ console.log(\`Hello, \${name}!\`)
 
 ## Saving, syncing, and recovery
 
-Changes save automatically and sync to your other devices. You can keep editing offline, and syncing resumes when you reconnect.
+Changes save automatically and sync to your other devices. You can keep editing offline, and queued writes replay in order after reconnection. Everyday actions appear locally first and roll back only if background persistence fails; stale sync responses cannot overwrite newer local state.
+
+Install the PWA under **Settings → About**. Application updates wait for confirmation and flush pending note writes before refreshing; only the owner receives deployment-version reminders. Existing databases upgrade through versioned, idempotent migrations, but keep a current backup before updating a self-hosted deployment.
 
 Add several WebDAV/S3 destinations and a schedule under **Settings → Backup**. Import or export \`.md\`, \`.zip\`, and complete JSON archives under **Settings → Data**.
 

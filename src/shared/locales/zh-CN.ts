@@ -116,6 +116,28 @@ export const ZH_CN_MESSAGES = {
     "command.switch_to_light_theme": "切换到浅色主题",
     "command.triggered_as_you_type": "输入即触发",
     "command.use_nearly_every_action_without_touching_the_mouse": "几乎所有操作都可以不碰鼠标",
+    "attachments.cleanup": "清理未引用",
+    "attachments.cleanup_confirm": "清理未引用附件？",
+    "attachments.cleanup_confirm_description": "只删除不再出现在任何笔记正文中的附件，此操作不可撤销。",
+    "attachments.cleanup_failed": "清理失败",
+    "attachments.cleaned_value0": "已清理 {value0} 个附件",
+    "attachments.delete": "删除附件",
+    "attachments.delete_confirm_value0": "删除附件「{value0}」？",
+    "attachments.delete_failed": "删除附件失败",
+    "attachments.deleted": "附件已删除",
+    "attachments.empty": "还没有附件。在笔记里粘贴或拖入图片即可上传。",
+    "attachments.filter_all": "全部",
+    "attachments.filter_documents": "文档",
+    "attachments.filter_images": "图片",
+    "attachments.filter_other": "其他",
+    "attachments.freed_value0": "释放 {value0}",
+    "attachments.manage": "管理附件",
+    "attachments.manage_description": "查看、筛选和删除所有已上传的附件。",
+    "attachments.none_match": "没有匹配的附件",
+    "attachments.nothing_to_clean": "没有需要清理的附件",
+    "attachments.referenced_value0": "引用 {value0} 次",
+    "attachments.total_value0": "共 {value0} 个附件",
+    "attachments.unreferenced": "未引用",
     "common.about": "约",
     "common.access_control": "访问控制",
     "common.access_passcode": "访问口令",
@@ -300,6 +322,7 @@ export const ZH_CN_MESSAGES = {
     "notes.offline_modifications_have_been_restored_as_a_new_note": "离线修改已恢复为一篇新笔记。",
     "notes.open_a_copy": "打开副本",
     "notes.open_navigation": "打开导航",
+    "notes.open_to_side": "在侧边打开",
     "notes.other": "其他",
     "notes.permanent_deletion_failed": "彻底删除失败",
     "notes.permanent_deletion_was_canceled_because_the_note_body_is_not_safely_sync": "正文尚未安全同步，已取消彻底删除",
@@ -532,7 +555,7 @@ export const ZH_CN_MESSAGES = {
     "settings.look_at_home_together": "会像这样和谐地排在一起。",
     "settings.maintenance": "维护",
     "settings.manual": "手动",
-    "settings.mcp": "AI 与 MCP",
+    "settings.mcp": "MCP",
     "settings.mcp_ai_search": "AI 语义搜索",
     "settings.mcp_ai_search_clear": "清空索引",
     "settings.mcp_ai_search_clear_desc": "删除本账号存储的全部向量并取消待处理任务。之后搜索会回退为关键词匹配，直到你重新建立索引。",
@@ -570,6 +593,8 @@ export const ZH_CN_MESSAGES = {
     "settings.mcp_copied": "已复制",
     "settings.mcp_copy": "复制",
     "settings.mcp_disabled": "已停用",
+    "settings.mcp_demo_desc": "这里按已配置的 Inkstone 服务器完整展示全部 MCP 选项。端点、凭据、客户端和索引统计均为示例；Demo 中所有 MCP 操作都已禁用。",
+    "settings.mcp_demo_title": "仅展示的 MCP 预览",
     "settings.mcp_enable": "启用 MCP",
     "settings.mcp_enable_desc": "控制所有账号的远程 MCP 服务；停用期间，已有授权也无法继续访问。",
     "settings.mcp_endpoint": "远程 MCP 端点",
@@ -784,6 +809,7 @@ export const ZH_CN_MESSAGES = {
     "shell.quick_open": "快速跳转笔记",
     "shell.resize_navigation_panel": "调整导航栏宽度",
     "shell.resize_note_list": "调整笔记列表宽度",
+    "shell.resize_note_panes": "调整两个笔记窗格的宽度",
     "shell.save_now": "立即保存",
     "shell.saving": "正在保存…",
     "shell.search_all_notes": "全文搜索",
@@ -816,6 +842,21 @@ export const ZH_CN_MESSAGES = {
     "sidebar.switch_to_light": "切换到浅色",
     "sidebar.the_value0_notes_inside_move_up_one_level_and_are_not_deleted": "里面的 {value0} 篇笔记会移动到上一层，不会被删除。",
     "sidebar.this_folder_is_empty": "这个文件夹是空的。",
+    "tags.change_color": "更改颜色",
+    "tags.clear_color": "清除颜色",
+    "tags.color_failed": "更新颜色失败",
+    "tags.delete": "删除标签",
+    "tags.delete_confirm_value0": "删除标签「{value0}」？该标签也会从相关笔记的正文中移除。",
+    "tags.delete_failed": "删除标签失败",
+    "tags.deleted": "标签已删除",
+    "tags.empty_search": "没有匹配的标签",
+    "tags.invalid_name": "标签名不能包含空格或 #",
+    "tags.manage": "标签管理",
+    "tags.rename": "重命名",
+    "tags.rename_failed": "重命名失败",
+    "tags.renamed": "标签已重命名",
+    "tags.search_placeholder": "搜索标签…",
+    "tags.total_value0": "共 {value0} 个标签",
     "time.just_now": "刚刚",
     "time.this_month": "本月",
     "time.this_week": "本周",
@@ -828,6 +869,7 @@ export const ZH_CN_MESSAGES = {
     "workspace.block_reference": "块引用",
     "workspace.callout": "提示块",
     "workspace.characters": "字符",
+    "workspace.close_right_note": "关闭右侧笔记",
     "workspace.choose_a_note_or_write_a_new_one": "选一篇笔记，或者写一篇新的",
     "workspace.code_block": "代码块",
     "workspace.definition_list": "定义列表",
@@ -836,6 +878,11 @@ export const ZH_CN_MESSAGES = {
     "workspace.divider": "分隔线",
     "workspace.edit_only": "仅编辑",
     "workspace.enhanced_code_block": "增强代码块",
+    "workspace.export": "导出",
+    "workspace.export_failed": "导出失败",
+    "workspace.export_html": "导出 HTML",
+    "workspace.export_markdown": "导出 Markdown",
+    "workspace.export_pdf": "导出 PDF",
     "workspace.footnote": "脚注",
     "workspace.heading_value0": "{value0} 级标题",
     "workspace.inline_math": "行内公式",
@@ -845,6 +892,7 @@ export const ZH_CN_MESSAGES = {
     "workspace.large_content_using_a_faster_comparison": "内容较大，已使用快速对比",
     "workspace.latest": "最近一次",
     "workspace.layout": "布局",
+    "workspace.left_note_pane": "左侧笔记窗格",
     "workspace.link": "链接",
     "workspace.loading_note_content": "正在载入笔记正文",
     "workspace.note_title": "笔记标题",
@@ -864,6 +912,7 @@ export const ZH_CN_MESSAGES = {
     "workspace.preview_only": "仅预览",
     "workspace.remote_image": "网络图片",
     "workspace.resize_editor_and_preview_panes": "调整编辑与预览宽度",
+    "workspace.right_note_pane": "右侧笔记窗格",
     "workspace.restore_this_version": "恢复到这个版本？",
     "workspace.restore_this_version_da5169": "恢复此版本",
     "workspace.restored_to_selected_version": "已恢复到所选版本",
@@ -888,8 +937,12 @@ aliases:
 
 # 欢迎使用 Inkstone
 
-> [!TIP] 先知道这三件事
-> 这是你的私有 Markdown 笔记本；内容会自动保存，断网也能继续写。
+> [!TIP] 先知道这五件事
+> - 这是你的私有 Markdown 笔记本；正文始终是普通文本。
+> - 内容会自动保存，断网也能继续写，重新联网后自动补传。
+> - 新建、移动、整理和删除等常用操作会先在本地立即生效；保存失败时安全回滚。
+> - 笔记顶部标题可以独立编辑，不必与正文第一行相同。
+> - MCP 完全可选，并且必须经过账号授权才能读取笔记。
 
 左侧管理笔记，中间编辑纯文本 Markdown，右侧实时预览。没有专有文档格式，备份里的 \`.md\` 文件可以被任何文本编辑器打开。
 
@@ -900,6 +953,11 @@ aliases:
 - [ ] 选中文字，按 \`Ctrl + B\` 加粗
 - [ ] 按 \`Ctrl + K\` 打开命令面板
 - [ ] 写一个 \`#标签\`，或点击 [[我的第一篇笔记]] 创建双链笔记
+- [ ] 点击笔记顶部标题，把它改成与正文不同的名称
+- [ ] 新建一个子文件夹，再把它拖到其他文件夹或同级位置
+- [ ] 按住 Alt 点击另一篇笔记，或选择**在侧边打开**，同时处理两篇笔记
+- [ ] 在 **设置 → 关于** 把 Inkstone 安装成可离线启动的 PWA
+- [ ] 打开 **设置 → MCP** 查看私有 AI 接入方式和权限
 - [ ] 在 **设置 → 备份** 添加一个备份目标
 - [ ] 给一篇笔记创建带口令的分享
 
@@ -928,14 +986,29 @@ aliases:
 
 ::: tabs
 @tab 写作
-源码编辑、实时预览、双向滚动、专注模式、打字机模式、大纲与版本历史。
+独立标题、源码编辑、实时预览、双向滚动、专注模式、打字机模式、大纲与版本历史。
 
 @tab 组织
-最多 12 层文件夹、正文 \`#标签\`、\`[[双链]]\`、反向链接、关系图谱和中文全文搜索。
+最多 12 层且可拖拽排序的文件夹、正文 \`#标签\`、\`[[双链]]\`、反向链接、关系图谱和中文全文搜索。桌面端可以在侧边再开一篇笔记，每个窗格独立选择编辑、分栏或预览；删除文件夹时会保留并提升子文件夹，直属笔记移到上一级。
+
+@tab 搜索与 AI
+命令面板、关键词搜索，以及可选的 Workers AI 语义/混合搜索。每个账号使用独立索引；AI 不可用时自动回退到关键词结果。
 
 @tab 安全与备份
-自托管、离线可写、多设备同步；可同时备份到多个 WebDAV 或 S3 目标，并导出可读 Markdown 与完整 JSON。
+自托管、可安装 PWA、离线可写、多设备同步和冲突副本；可同时备份到多个 WebDAV 或 S3 目标，并导出可读 Markdown、附件与完整结构化数据。
 :::
+
+## 私有 MCP（可选）
+
+在 **设置 → MCP** 中，站长可以启用远程 MCP 服务，每个账号再决定是否允许写入或移入回收站：
+
+- Codex、Claude Code 等完整 MCP 客户端通过带 PKCE 的 OAuth 2.1 授权；可以随时撤销单个或全部客户端。
+- 脚本或不支持 OAuth 的精简客户端可以使用 \`ink_...\` API Key。Key 只显示一次，服务端只保存哈希，也可以随时撤销。
+- MCP 可以搜索、分段读取、查看大纲/文件夹/标签/链接，并在明确授权后安全创建、编辑、整理、移入回收站或恢复笔记；永久删除始终不可用。
+- 配置 Workers AI 后可以建立按账号隔离的语义索引，并把语义结果与关键词结果合并。索引可重建或清空，正文变化会在后台更新。
+
+> [!WARNING] 连接外部 AI 前先确认隐私政策
+> Inkstone 会隔离账号并校验权限，但已授权客户端实际读取到的内容，之后仍由该客户端处理。
 
 ## Markdown 速查
 
@@ -1047,7 +1120,9 @@ console.log(\`Hello, \${name}!\`)
 
 ## 保存、同步与恢复
 
-内容会自动保存并同步到其他设备；断网时可以继续编辑，重新联网后会自动完成同步。
+内容会自动保存并同步到其他设备；断网时可以继续编辑，重新联网后会按顺序补传。普通操作会先在本地立即显示，后台保存失败才回滚；过期的同步结果不会覆盖更新的本地状态。
+
+在 **设置 → 关于** 可以安装 PWA。新版本会先提示再刷新，并在刷新前提交待保存的笔记；只有站长会收到部署版本更新提醒。现有数据库升级会自动执行带版本号、可重复安全运行的迁移，但更新自托管实例前仍应保留最新备份。
 
 在 **设置 → 备份** 中可添加多个 WebDAV/S3 目标并设置自动计划；在 **设置 → 数据** 中可导入或导出 \`.md\`、\`.zip\` 和完整 JSON。
 
