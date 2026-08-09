@@ -6,7 +6,8 @@ export const GITHUB_REPOSITORY_URL = 'https://github.com/shuaiplus/inkstone'
 export const GITHUB_PACKAGE_URL =
   'https://raw.githubusercontent.com/shuaiplus/inkstone/refs/heads/main/package.json'
 export const CLIENT_HEADER = 'X-Inkstone-Client'
-export const SESSION_COOKIE = 'inkstone_session'
+export const SESSION_COOKIE = '__Host-inkstone_session'
+export const LEGACY_SESSION_COOKIE = 'inkstone_session'
 
 export const SESSION_TTL_MS = 90 * 24 * 60 * 60 * 1000
 export const SESSION_RENEW_BEFORE_MS = SESSION_TTL_MS / 2
@@ -19,6 +20,8 @@ export const LIMITS = {
   tagNameMaxLength: 60,
   folderDepthMax: 12,
   attachmentMaxBytes: 25 * 1024 * 1024,
+  attachmentQuotaBytes: 1024 * 1024 * 1024,
+  attachmentUploadsPerHour: 100,
   importFilesMax: 100,
   importUploadMaxBytes: 32 * 1024 * 1024,
   importBundleMaxBytes: 24 * 1024 * 1024,
@@ -59,6 +62,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
     language: 'zh-CN',
     theme: 'system',
     accent: 'cinnabar',
+    background: 'paper',
     density: 'comfortable',
     proseFont: 'sans',
     proseSize: 16,
@@ -102,6 +106,7 @@ export const BACKUP_INTERVALS: Record<string, number> = {
 const THEMES = ['light', 'dark', 'system'] as const
 const LANGUAGES = ['zh-CN', 'en-US'] as const
 const ACCENT_NAMES = ACCENTS.map((accent) => accent.name)
+const BACKGROUND_NAMES = ['paper', 'white'] as const
 const DENSITIES = ['comfortable', 'compact'] as const
 const PROSE_FONTS = ['sans', 'serif'] as const
 const PROSE_WIDTHS = ['narrow', 'normal', 'wide', 'full'] as const
@@ -126,6 +131,11 @@ export function mergeSettings(partial: unknown): UserSettings {
     base.appearance.language,
   )
   base.appearance.accent = enumValue(appearance.accent, ACCENT_NAMES, base.appearance.accent)
+  base.appearance.background = enumValue(
+    appearance.background,
+    BACKGROUND_NAMES,
+    base.appearance.background,
+  )
   base.appearance.density = enumValue(
     appearance.density,
     DENSITIES,

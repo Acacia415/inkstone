@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { LIMITS } from '@shared/constants'
-import { countText, deriveExcerpt, extractTags } from '@shared/markdown-utils'
+import { countText, deriveExcerpt, extractTags, normalizeLinkKey, replaceWikiLinkTarget } from '@shared/markdown-utils'
 import { duplicateNoteTitle, sliceText, truncateText, utf8ByteLength } from '@shared/text-utils'
 import type {
   CreateNoteBody,
@@ -146,6 +146,11 @@ notesRoutes.post('/trash/empty', async (c) => {
       )
     }
     statements.push(
+      c.env.DB.prepare(
+        `INSERT OR REPLACE INTO ai_index_queue (user_id, note_id, kind, created_at)
+         SELECT ?1, id, 'delete', ?2
+           FROM notes WHERE user_id = ?1 AND deleted_at IS NOT NULL`,
+      ).bind(userId, Date.now()),
       c.env.DB
         .prepare(
           `INSERT INTO changes (user_id, entity, entity_id, op, at)
@@ -157,14 +162,9 @@ notesRoutes.post('/trash/empty', async (c) => {
       c.env.DB
         .prepare(`DELETE FROM notes WHERE user_id = ?1 AND deleted_at IS NOT NULL`)
         .bind(userId),
-      c.env.DB.prepare(
-        `INSERT OR REPLACE INTO ai_index_queue (user_id, note_id, kind, created_at)
-         SELECT ?1, id, 'delete', ?2
-           FROM notes WHERE user_id = ?1 AND deleted_at IS NOT NULL`,
-      ).bind(userId, Date.now()),
     )
     const results = await c.env.DB.batch(statements)
-    const changeResult = results.at(-3) as D1Result<{ seq: number }> | undefined
+    const changeResult = results.at(-2) as D1Result<{ seq: number }> | undefined
     await broadcastCursor(c, changeResult?.results?.[0]?.seq)
     scheduleFtsDrain(c)
   }
@@ -192,6 +192,9 @@ notesRoutes.post('/', async (c) => {
   }
   if (body.folderId !== undefined && body.folderId !== null && typeof body.folderId !== 'string') {
     throw ApiError.badRequest('folderId must be a string or null')
+  }
+  if (body.isStarred !== undefined && typeof body.isStarred !== 'boolean') {
+    throw ApiError.badRequest('isStarred must be a boolean')
   }
   if (body.id !== undefined && !isValidId(body.id)) {
     throw ApiError.badRequest('id must be a valid note id')
@@ -222,9 +225,9 @@ notesRoutes.post('/', async (c) => {
   const insert = c.env.DB.prepare(
     `INSERT OR IGNORE INTO notes (id, user_id, folder_id, title, content, excerpt, rev, word_count, char_count,
        is_pinned, is_starred, is_archived, position, content_hash, created_at, updated_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?8, 0, 0, 0, ?9, ?10, ?11, ?11)`,
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?8, 0, ?9, 0, ?10, ?11, ?12, ?12)`,
   )
-    .bind(id, userId, folderId, title, content, excerpt, words, chars, now, hash, now)
+    .bind(id, userId, folderId, title, content, excerpt, words, chars, body.isStarred ? 1 : 0, now, hash, now)
   const derived = buildNoteDerivedStatements({
     db: c.env.DB,
     userId,
@@ -412,7 +415,7 @@ notesRoutes.patch('/:id', async (c) => {
     if (contentChanged && !sameTagSet(splitTags(row.tag_names), derived.tags)) {
       statements.push(
         c.env.DB.prepare(
-          `DELETE FROM tags WHERE user_id = ?1
+          `DELETE FROM tags WHERE user_id = ?1 AND is_manual = 0
              AND ${shiftSqlPlaceholders(mutationGuard, 1)}
              AND id NOT IN (SELECT tag_id FROM note_tags)`,
         ).bind(userId, ...mutationValues),
@@ -436,7 +439,29 @@ notesRoutes.patch('/:id', async (c) => {
     throw ApiError.conflict('This note was modified elsewhere', { server: current })
   }
   const changeResult = results.at(-1) as D1Result<{ seq: number }> | undefined
-  await broadcastCursor(c, changeResult?.results?.[0]?.seq)
+  let rewroteInbound = false
+  if (newTitle !== row.title) {
+    const duplicate = await c.env.DB.prepare(
+      `SELECT 1 AS found FROM notes
+        WHERE user_id = ?1 AND id <> ?2 AND deleted_at IS NULL AND title_key = ?3
+        LIMIT 1`,
+    ).bind(userId, id, normalizeLinkKey(newTitle)).first<{ found: number }>()
+    if (!duplicate) {
+      const rewrite = await rewriteInboundWikiLinks(
+        c.env.DB,
+        userId,
+        id,
+        row.title,
+        newTitle,
+        ftsEnabled,
+      )
+      if (rewrite.skipped) {
+        console.warn(`Could not update ${rewrite.skipped} wiki-link source notes after renaming note ${id}`)
+      }
+      rewroteInbound = rewrite.rewritten > 0
+    }
+  }
+  await broadcastCursor(c, rewroteInbound ? undefined : changeResult?.results?.[0]?.seq)
   if (contentChanged || newTitle !== row.title) {
     await enqueueNoteIndex(c.env.DB, userId, id, 'embed')
     scheduleFtsDrain(c)
@@ -477,6 +502,12 @@ notesRoutes.delete('/:id', async (c) => {
       ).bind(userId, id, now, id, userId, nextRev),
     )
   }
+  statements.push(
+    c.env.DB.prepare(
+      `INSERT OR REPLACE INTO ai_index_queue (user_id, note_id, kind, created_at)
+       SELECT ?1, ?2, 'delete', ?3 WHERE ${shiftSqlPlaceholders(guard, 3)}`,
+    ).bind(userId, id, now, id, userId, nextRev),
+  )
   statements.push(
     c.env.DB.prepare(
       `INSERT INTO changes (user_id, entity, entity_id, op, at)
@@ -582,6 +613,12 @@ notesRoutes.delete('/:id/purge', async (c) => {
   }
   statements.push(
     c.env.DB.prepare(
+      `INSERT OR REPLACE INTO ai_index_queue (user_id, note_id, kind, created_at)
+       SELECT ?1, ?2, 'delete', ?3 WHERE ${shiftSqlPlaceholders(guard, 3)}`,
+    ).bind(userId, id, Date.now(), id, userId, row.rev),
+  )
+  statements.push(
+    c.env.DB.prepare(
       `INSERT INTO changes (user_id, entity, entity_id, op, at)
        SELECT ?1, 'note', ?2, 'delete', ?3 WHERE ${shiftSqlPlaceholders(guard, 3)}
        RETURNING seq`,
@@ -589,16 +626,14 @@ notesRoutes.delete('/:id/purge', async (c) => {
     c.env.DB.prepare(
       `DELETE FROM notes WHERE id = ?1 AND user_id = ?2 AND rev = ?3 AND deleted_at IS NOT NULL`,
     ).bind(id, userId, row.rev),
-    c.env.DB.prepare(`DELETE FROM tags WHERE user_id = ?1 AND id NOT IN (SELECT tag_id FROM note_tags)`)
+    c.env.DB.prepare(`DELETE FROM tags
+      WHERE user_id = ?1 AND is_manual = 0
+        AND id NOT IN (SELECT tag_id FROM note_tags)`)
       .bind(userId),
-    c.env.DB.prepare(
-      `INSERT OR REPLACE INTO ai_index_queue (user_id, note_id, kind, created_at)
-       SELECT ?1, ?2, 'delete', ?3 WHERE ${shiftSqlPlaceholders(guard, 3)}`,
-    ).bind(userId, id, Date.now(), id, userId, row.rev),
   )
   const results = await c.env.DB.batch(statements)
-  const changeResult = results.at(-4) as D1Result<{ seq: number }> | undefined
-  const deleted = results.at(-3)
+  const changeResult = results.at(-3) as D1Result<{ seq: number }> | undefined
+  const deleted = results.at(-2)
   if (!deleted?.meta.changes) throw ApiError.conflict('Note state changed. Refresh and try again')
   const broadcastedCursor = await broadcastCursor(c, changeResult?.results?.[0]?.seq)
   const deletionCursor = changeResult?.results[0]?.seq
@@ -851,6 +886,103 @@ function linkContext(content: string, title: string): string {
     sliceText(content, start, end).replace(/\s+/g, ' ').trim() +
     (end < content.length ? '…' : '')
   )
+}
+
+async function rewriteInboundWikiLinks(
+  db: D1Database,
+  userId: string,
+  targetNoteId: string,
+  fromTitle: string,
+  toTitle: string,
+  ftsEnabled: boolean,
+): Promise<{ rewritten: number; skipped: number }> {
+  const previousKey = normalizeLinkKey(fromTitle)
+  const { results: candidates } = await db.prepare(
+    `SELECT DISTINCT n.id FROM links l
+      JOIN notes n ON n.id = l.source_note_id AND n.user_id = l.user_id
+     WHERE l.user_id = ?1 AND l.target_note_id = ?2 AND l.target_key = ?3
+       AND n.id <> ?2 AND n.deleted_at IS NULL`,
+  ).bind(userId, targetNoteId, previousKey).all<{ id: string }>()
+  let rewritten = 0
+  let skipped = 0
+  for (const candidate of candidates) {
+    let complete = false
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const note = await db.prepare(
+        `SELECT id, title, content, content_hash, rev, updated_at, deleted_at
+           FROM notes WHERE id = ?1 AND user_id = ?2`,
+      ).bind(candidate.id, userId).first<{
+        id: string
+        title: string
+        content: string
+        content_hash: string
+        rev: number
+        updated_at: number
+        deleted_at: number | null
+      }>()
+      if (!note) {
+        complete = true
+        break
+      }
+      const content = replaceWikiLinkTarget(note.content, fromTitle, toTitle)
+      if (content === note.content) {
+        complete = true
+        break
+      }
+      const hash = await sha256Hex(content)
+      const { words, chars } = countText(content)
+      const now = Math.max(Date.now(), note.updated_at + 1)
+      const nextRev = note.rev + 1
+      const guard = `EXISTS (SELECT 1 FROM notes
+        WHERE id = ?1 AND user_id = ?2 AND rev = ?3
+          AND content_hash = ?4 AND title = ?5 AND updated_at = ?6)`
+      const guardValues = [note.id, userId, nextRev, hash, note.title, now] as const
+      const statements: D1PreparedStatement[] = [
+        db.prepare(
+          `UPDATE notes SET content = ?1, excerpt = ?2, word_count = ?3, char_count = ?4,
+             content_hash = ?5, rev = ?6, updated_at = ?7
+            WHERE id = ?8 AND user_id = ?9 AND rev = ?10 AND content_hash = ?11`,
+        ).bind(content, deriveExcerpt(content), words, chars, hash, nextRev, now,
+          note.id, userId, note.rev, note.content_hash),
+        db.prepare(
+          `INSERT INTO note_versions (id, note_id, user_id, title, content, size, created_at)
+           SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7 WHERE ${shiftSqlPlaceholders(guard, 7)}`,
+        ).bind(newId(), note.id, userId, note.title, note.content,
+          utf8ByteLength(note.content), now, ...guardValues),
+        db.prepare(
+          `DELETE FROM note_versions WHERE note_id = ?1
+             AND ${shiftSqlPlaceholders(guard, 1)}
+             AND id NOT IN (SELECT id FROM note_versions WHERE note_id = ?1 ORDER BY created_at DESC LIMIT ?8)`,
+        ).bind(note.id, ...guardValues, LIMITS.versionsPerNote),
+      ]
+      statements.push(...buildNoteDerivedStatements({
+        db,
+        userId,
+        noteId: note.id,
+        title: note.title,
+        content,
+        ftsEnabled,
+        expectedRev: nextRev,
+        expectedContentHash: hash,
+        expectedTitle: note.title,
+        expectedUpdatedAt: now,
+      }).statements)
+      statements.push(
+        db.prepare(
+          `INSERT INTO changes (user_id, entity, entity_id, op, at)
+           SELECT ?1, 'note', ?2, 'upsert', ?3 WHERE ${shiftSqlPlaceholders(guard, 3)}`,
+        ).bind(userId, note.id, now, ...guardValues),
+      )
+      const [updated] = await db.batch(statements)
+      if (updated?.meta.changes) {
+        rewritten++
+        complete = true
+        break
+      }
+    }
+    if (!complete) skipped++
+  }
+  return { rewritten, skipped }
 }
 
 function sameTagSet(left: string[], right: string[]): boolean {

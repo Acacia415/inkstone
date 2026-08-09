@@ -1,12 +1,14 @@
 import { Hono } from 'hono'
 import { APP_VERSION, LIMITS, mergeSettingsPatch } from '@shared/constants'
 import { duplicateNoteTitle } from '@shared/text-utils'
+import { organizerColorOrNull } from '@shared/organizer-colors'
 import {
   deriveExcerpt,
   deriveTitle,
   extractWikiLinks,
   normalizeLinkKey,
   replaceTagInContent,
+  wikiNoteTarget,
 } from '@shared/markdown-utils'
 import type {
   BackupMode,
@@ -15,6 +17,7 @@ import type {
   BackupTargetInput,
   ExportBundle,
   Folder,
+  GraphResponse,
   ImportResult,
   McpSettingsInfo,
   Note,
@@ -167,7 +170,7 @@ export function createDemoBackend(): DemoBackend {
       folderId: typeof body.folderId === 'string' && state.folders.has(body.folderId) ? body.folderId : null,
       tags: [],
       isPinned: false,
-      isStarred: false,
+      isStarred: body.isStarred === true,
       isArchived: false,
       wordCount: 0,
       charCount: 0,
@@ -322,6 +325,7 @@ export function createDemoBackend(): DemoBackend {
       parentId,
       name,
       icon: typeof body.icon === 'string' ? body.icon : null,
+      color: organizerColorOrNull(body.color),
       position: (siblings.at(-1)?.position ?? 0) + 1000,
       createdAt: now,
       updatedAt: now,
@@ -361,6 +365,7 @@ export function createDemoBackend(): DemoBackend {
       name,
       parentId,
       icon: body.icon === null || typeof body.icon === 'string' ? body.icon : current.icon,
+      color: 'color' in body ? organizerColorOrNull(body.color) : current.color,
       updatedAt: Date.now(),
     }
     const shouldPlace = 'beforeId' in body || parentId !== current.parentId
@@ -416,12 +421,33 @@ export function createDemoBackend(): DemoBackend {
   })
 
   app.get('/api/tags', (c) => c.json({ tags: listTags(state) }))
+  app.post('/api/tags', async (c) => {
+    const body = await jsonBody(c.req.raw)
+    const name = typeof body.name === 'string' ? body.name.trim().replace(/^#+/, '') : ''
+    if (!name || /[\s#]/.test(name) || name.length > LIMITS.tagNameMaxLength) {
+      return apiError(400, 'bad_request', 'Tag name is invalid')
+    }
+    const existing = listTags(state).find((tag) =>
+      tag.name.localeCompare(name, undefined, { sensitivity: 'base' }) === 0)
+    if (existing) return apiError(409, 'conflict', 'A tag with this name already exists')
+    const id = typeof body.id === 'string' ? body.id : newDemoId()
+    state.tagIds.set(name, id)
+    state.tagColors.set(name, body.color === null || typeof body.color === 'string' ? body.color : null)
+    state.cursor++
+    return c.json(listTags(state).find((tag) => tag.id === id)!, 201)
+  })
   app.patch('/api/tags/:id', async (c) => {
     const current = listTags(state).find((tag) => tag.id === c.req.param('id'))
     if (!current) return apiError(404, 'not_found', 'Tag not found')
     const body = await jsonBody(c.req.raw)
+    if (typeof body.color === 'string' && !/^#[0-9a-f]{6}$/i.test(body.color)) {
+      return apiError(400, 'bad_request', 'Tag color must be a six-digit hexadecimal color')
+    }
     if (typeof body.name === 'string' && body.name.trim() && body.name.trim() !== current.name) {
-      const nextName = body.name.trim().replace(/^#/, '')
+      const requestedName = body.name.trim().replace(/^#/, '')
+      const existing = listTags(state).find((tag) => tag.id !== current.id
+        && tag.name.localeCompare(requestedName, undefined, { sensitivity: 'base' }) === 0)
+      const nextName = existing?.name ?? requestedName
       let renamed = 0
       for (const note of state.notes.values()) {
         const content = replaceTagInContent(note.content, current.name, nextName)
@@ -430,10 +456,10 @@ export function createDemoBackend(): DemoBackend {
         renamed++
       }
       state.tagIds.delete(current.name)
-      state.tagIds.set(nextName, current.id)
+      if (!existing) state.tagIds.set(nextName, current.id)
       state.tagColors.set(nextName, body.color === null || typeof body.color === 'string'
         ? body.color
-        : state.tagColors.get(current.name) ?? null)
+        : state.tagColors.get(nextName) ?? state.tagColors.get(current.name) ?? null)
       state.tagColors.delete(current.name)
       state.cursor++
       return c.json({ ok: true as const, renamed })
@@ -477,25 +503,107 @@ export function createDemoBackend(): DemoBackend {
   })
   app.post('/api/search/reindex', (c) => c.json({ ok: true as const, indexed: state.notes.size }))
   app.get('/api/graph', (c) => {
-    const active = [...state.notes.values()].filter((note) => note.deletedAt === null)
-    const byTitle = new Map(active.map((note) => [normalizeLinkKey(note.title), note]))
-    const edges = active.flatMap((note) => extractWikiLinks(note.content)
-      .map((link) => byTitle.get(link.key))
-      .filter((target): target is Note => Boolean(target && target.id !== note.id))
-      .map((target) => ({ source: note.id, target: target.id })))
+    const mode = c.req.query('mode') === 'local' ? 'local' : 'global'
+    const centerId = c.req.query('center') || null
+    const depth = Math.max(1, Math.min(3, Number(c.req.query('depth')) || 1))
+    const limit = Math.max(50, Math.min(600, Number(c.req.query('limit')) || 350))
+    const needle = (c.req.query('q') ?? '').trim().toLocaleLowerCase()
+    const folderId = c.req.query('folderId') ?? ''
+    const tag = (c.req.query('tag') ?? '').trim().toLocaleLowerCase()
+    const includeOrphans = c.req.query('includeOrphans') !== '0'
+    const includeUnresolved = c.req.query('includeUnresolved') === '1'
+    const active = [...state.notes.values()]
+      .filter((note) => note.deletedAt === null && !note.isArchived)
+      .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
+    const byTitle = new Map<string, Note>()
+    for (const note of active) {
+      const key = normalizeLinkKey(note.title)
+      if (!byTitle.has(key)) byTitle.set(key, note)
+    }
+    const linkRecords = active.flatMap((note) => extractWikiLinks(note.content).map((link) => ({
+      source: note.id,
+      target: byTitle.get(link.key)?.id ?? null,
+      key: link.key,
+      title: wikiNoteTarget(link.target),
+    })))
+    const allEdges = linkRecords
+      .filter((link): link is typeof link & { target: string } => Boolean(link.target && link.target !== link.source))
+      .map((link) => ({ source: link.source, target: link.target }))
+    const uniqueEdges = [...new Map(allEdges.map((edge) => [`${edge.source}>${edge.target}`, edge])).values()]
     const degree = new Map<string, number>()
-    for (const edge of edges) {
+    const incoming = new Map<string, number>()
+    const outgoing = new Map<string, number>()
+    for (const edge of uniqueEdges) {
       degree.set(edge.source, (degree.get(edge.source) ?? 0) + 1)
       degree.set(edge.target, (degree.get(edge.target) ?? 0) + 1)
+      outgoing.set(edge.source, (outgoing.get(edge.source) ?? 0) + 1)
+      incoming.set(edge.target, (incoming.get(edge.target) ?? 0) + 1)
+    }
+    let allowed = new Set(active.map((note) => note.id))
+    if (mode === 'local' && centerId) {
+      allowed = new Set([centerId])
+      let frontier = new Set([centerId])
+      for (let level = 0; level < depth; level++) {
+        const next = new Set<string>()
+        for (const edge of uniqueEdges) {
+          if (frontier.has(edge.source) && !allowed.has(edge.target)) next.add(edge.target)
+          if (frontier.has(edge.target) && !allowed.has(edge.source)) next.add(edge.source)
+        }
+        for (const id of next) allowed.add(id)
+        frontier = next
+      }
+    }
+    const filtered = active.filter((note) => allowed.has(note.id)
+      && (!needle || note.title.toLocaleLowerCase().includes(needle))
+      && (!folderId || note.folderId === folderId)
+      && (!tag || note.tags.some((name) => name.toLocaleLowerCase() === tag))
+      && (includeOrphans || (degree.get(note.id) ?? 0) > 0))
+      .sort((a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0) || b.updatedAt - a.updatedAt)
+    const shown = filtered.slice(0, limit)
+    const shownIds = new Set(shown.map((note) => note.id))
+    const edges = uniqueEdges.filter((edge) => shownIds.has(edge.source) && shownIds.has(edge.target))
+    const folders = new Map(listFolders(state).map((folder) => [folder.id, folder]))
+    const nodes: GraphResponse['nodes'] = shown.map((note) => ({
+      id: note.id,
+      title: note.title,
+      kind: 'note' as const,
+      degree: degree.get(note.id) ?? 0,
+      inDegree: incoming.get(note.id) ?? 0,
+      outDegree: outgoing.get(note.id) ?? 0,
+      folderId: note.folderId,
+      folderName: note.folderId ? folders.get(note.folderId)?.name ?? null : null,
+      folderColor: note.folderId ? folders.get(note.folderId)?.color ?? null : null,
+      tags: note.tags.map((name) => ({ name, color: state.tagColors.get(name) ?? null })),
+    }))
+    const unresolved = new Map<string, { title: string; sources: Set<string> }>()
+    if (includeUnresolved) {
+      for (const link of linkRecords) {
+        if (link.target !== null || !shownIds.has(link.source)) continue
+        if (unresolved.size >= 50 && !unresolved.has(link.key)) continue
+        const missing = unresolved.get(link.key) ?? { title: link.title, sources: new Set<string>() }
+        missing.sources.add(link.source)
+        unresolved.set(link.key, missing)
+      }
+      for (const [key, missing] of unresolved) {
+        const id = `unresolved:${key}`
+        nodes.push({ id, title: missing.title, kind: 'unresolved', degree: missing.sources.size,
+          inDegree: missing.sources.size, outDegree: 0, folderId: null, folderName: null,
+          folderColor: null, tags: [] })
+        for (const source of missing.sources) edges.push({ source, target: id })
+      }
     }
     return c.json({
-      nodes: active.map((note) => ({
-        id: note.id,
-        title: note.title,
-        degree: degree.get(note.id) ?? 0,
-        folderId: note.folderId,
-      })),
+      nodes,
       edges,
+      meta: {
+        mode,
+        centerId: mode === 'local' ? centerId : null,
+        depth,
+        totalNodes: filtered.length + unresolved.size,
+        totalEdges: edges.length,
+        truncated: filtered.length > limit,
+        limit,
+      },
     })
   })
   app.get('/api/sync', (c) => {
@@ -1034,6 +1142,7 @@ function importBundle(state: DemoState, value: unknown, result: ImportResult): v
       parentId: raw.parentId ? folderMap.get(raw.parentId) ?? null : null,
       name: typeof raw.name === 'string' ? raw.name : 'Imported folder',
       icon: typeof raw.icon === 'string' ? raw.icon : null,
+      color: organizerColorOrNull(raw.color),
       position: Number.isFinite(raw.position) ? raw.position : state.folders.size + 1,
       createdAt: Number.isFinite(raw.createdAt) ? raw.createdAt : Date.now(),
       updatedAt: Date.now(),
