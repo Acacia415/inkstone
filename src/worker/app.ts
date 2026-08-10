@@ -19,6 +19,7 @@ import { mcpAuthorizeRoutes } from './routes/mcp-authorize'
 import { mcpSettingsRoutes } from './routes/mcp-settings'
 import type { AppBindings } from './env'
 import { selectAttachmentStorage } from './attachments/backend'
+import { contentSecurityPolicy } from './lib/content-security-policy'
 
 export function createApp() {
   const app = new Hono<AppBindings>()
@@ -26,19 +27,13 @@ export function createApp() {
   app.onError((err, c) => errorResponse(c, err))
   app.use('*', async (c, next) => {
     await next()
-    const isHttps = new URL(c.req.url).protocol === 'https:'
-    const imageSchemes = isHttps ? 'https:' : 'https: http:'
+    const requestUrl = new URL(c.req.url)
+    const isHttps = requestUrl.protocol === 'https:'
     c.header('X-Content-Type-Options', 'nosniff')
     c.header('X-Frame-Options', 'DENY')
     c.header('Referrer-Policy', 'strict-origin-when-cross-origin')
     c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
-    c.header(
-      'Content-Security-Policy',
-        "default-src 'self'; base-uri 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
-        `img-src 'self' data: blob: ${imageSchemes}; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; ` +
-        "manifest-src 'self'; media-src 'self' blob:; form-action 'self'; frame-src 'none'; " +
-        "frame-ancestors 'none'; object-src 'none'",
-    )
+    c.header('Content-Security-Policy', contentSecurityPolicy(requestUrl))
     if (isHttps) {
       c.header('Strict-Transport-Security', 'max-age=31536000')
     }
