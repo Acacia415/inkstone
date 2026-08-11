@@ -3,6 +3,7 @@ import { initializeDatabase } from './db/schema'
 import { ApiError, errorResponse } from './lib/errors'
 import { loadSession, requireClientHeader } from './middleware/auth'
 import { authRoutes } from './routes/auth'
+import { totpRoutes } from './routes/totp'
 import { notesRoutes } from './routes/notes'
 import { foldersRoutes } from './routes/folders'
 import { tagsRoutes } from './routes/tags'
@@ -19,7 +20,6 @@ import { mcpAuthorizeRoutes } from './routes/mcp-authorize'
 import { mcpSettingsRoutes } from './routes/mcp-settings'
 import type { AppBindings } from './env'
 import { selectAttachmentStorage } from './attachments/backend'
-import { contentSecurityPolicy } from './lib/content-security-policy'
 
 export function createApp() {
   const app = new Hono<AppBindings>()
@@ -27,13 +27,20 @@ export function createApp() {
   app.onError((err, c) => errorResponse(c, err))
   app.use('*', async (c, next) => {
     await next()
-    const requestUrl = new URL(c.req.url)
-    const isHttps = requestUrl.protocol === 'https:'
+    const isHttps = new URL(c.req.url).protocol === 'https:'
+    const imageSchemes = isHttps ? 'https:' : 'https: http:'
+    const formAction = authorizationFormAction(c.req.url, c.res)
     c.header('X-Content-Type-Options', 'nosniff')
     c.header('X-Frame-Options', 'DENY')
     c.header('Referrer-Policy', 'strict-origin-when-cross-origin')
     c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
-    c.header('Content-Security-Policy', contentSecurityPolicy(requestUrl))
+    c.header(
+      'Content-Security-Policy',
+        "default-src 'self'; base-uri 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
+        `img-src 'self' data: blob: ${imageSchemes}; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; ` +
+        `manifest-src 'self'; media-src 'self' blob:; form-action ${formAction}; frame-src 'none'; ` +
+        "frame-ancestors 'none'; object-src 'none'",
+    )
     if (isHttps) {
       c.header('Strict-Transport-Security', 'max-age=31536000')
     }
@@ -77,6 +84,7 @@ export function createApp() {
     })
   })
 
+  app.route('/api/auth/totp', totpRoutes)
   app.route('/api/auth', authRoutes)
   app.route('/api/notes', notesRoutes)
   app.route('/api/folders', foldersRoutes)
@@ -105,4 +113,23 @@ export function createApp() {
   app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw))
 
   return app
+}
+
+function authorizationFormAction(requestUrl: string, response: Response): string {
+  const sources = ["'self'"]
+  const url = new URL(requestUrl)
+  if (url.pathname !== '/authorize' || response.status !== 200 ||
+      !response.headers.get('Content-Type')?.includes('text/html')) {
+    return sources.join(' ')
+  }
+  const redirectUri = url.searchParams.get('redirect_uri')
+  if (!redirectUri) return sources.join(' ')
+  try {
+    const callback = new URL(redirectUri)
+    if ((callback.protocol === 'http:' || callback.protocol === 'https:') && callback.origin !== url.origin) {
+      sources.push(callback.origin)
+    }
+  } catch {
+  }
+  return sources.join(' ')
 }
