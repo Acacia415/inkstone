@@ -761,6 +761,15 @@
   cursor: zoom-in;
   background: var(--bg-inset);
 }
+.ink-prose video {
+  display: block;
+  width: min(100%, 960px);
+  max-height: 72vh;
+  margin: 0.9em auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  background: #000;
+}
 .ink-prose figure {
   margin: 1em 0;
 }

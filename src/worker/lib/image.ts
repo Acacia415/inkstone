@@ -106,6 +106,17 @@ export function hasExpectedImageSignature(bytes: Uint8Array, mime: string): bool
   return false
 }
 
+export function hasExpectedVideoSignature(bytes: Uint8Array, mime: string): boolean {
+  if (mime === 'video/mp4' || mime === 'video/quicktime') {
+    return bytes.length >= 12 && ascii(bytes, 4, 8) === 'ftyp'
+  }
+  if (mime === 'video/webm') {
+    return bytes.length >= 4 &&
+      bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3
+  }
+  return false
+}
+
 export function hasReasonableImageDimensions(
   dimensions: { width: number; height: number } | null,
 ): boolean {
@@ -127,6 +138,9 @@ const EXT_BY_MIME: Record<string, string> = {
   'image/webp': 'webp',
   'image/svg+xml': 'svg',
   'image/avif': 'avif',
+  'video/mp4': 'mp4',
+  'video/quicktime': 'mov',
+  'video/webm': 'webm',
   'application/pdf': 'pdf',
   'text/plain': 'txt',
   'text/markdown': 'md',
@@ -147,6 +161,9 @@ export const ALLOWED_MIME = new Set([
   'image/webp',
   'image/avif',
   'image/svg+xml',
+  'video/mp4',
+  'video/quicktime',
+  'video/webm',
   'application/pdf',
   'text/plain',
   'text/markdown',
@@ -160,11 +177,12 @@ export function safeAttachmentMime(bytes: Uint8Array, reportedMime: string): str
   const normalized = reportedMime.trim().toLowerCase().split(';', 1)[0] || 'application/octet-stream'
   if (!ALLOWED_MIME.has(normalized)) return 'application/octet-stream'
   if (isInlineSafe(normalized) && !hasExpectedImageSignature(bytes, normalized)) {
-    return 'application/octet-stream'
+    if (!hasExpectedVideoSignature(bytes, normalized)) return 'application/octet-stream'
   }
   return normalized
 }
 
 export function isInlineSafe(mime: string): boolean {
-  return mime.startsWith('image/') && mime !== 'image/svg+xml'
+  return (mime.startsWith('image/') && mime !== 'image/svg+xml') ||
+    mime === 'video/mp4' || mime === 'video/quicktime' || mime === 'video/webm'
 }
