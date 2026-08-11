@@ -635,10 +635,12 @@ const PURIFY_CONFIG = {
         'tabindex',
         'width',
         'height',
+        'controls',
+        'preload',
         'lang',
         'dir',
     ],
-    ADD_TAGS: ['figure', 'figcaption', 'details', 'summary'],
+    ADD_TAGS: ['figure', 'figcaption', 'details', 'summary', 'video'],
     FORBID_TAGS: ['style', 'script', 'iframe', 'object', 'embed', 'form', 'input', 'link', 'base'],
     FORBID_ATTR: [
         'style',

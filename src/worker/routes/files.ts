@@ -1,4 +1,4 @@
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { getCookie } from 'hono/cookie'
 import { LIMITS } from '@shared/constants'
 import { extractAttachmentIds } from '@shared/markdown-utils'
@@ -17,11 +17,13 @@ import { persistAttachmentWithinQuota } from '../attachments/storage'
 import type { AppBindings } from '../env'
 import { ApiError } from '../lib/errors'
 import { isValidId, isValidSlug, newId } from '../lib/id'
-import { isInlineSafe } from '../lib/image'
+import { isInlineSafe, safeAttachmentMime } from '../lib/image'
 import { FORM_BODY_LIMITS, readFormDataWithinLimit } from '../lib/request'
 import { consumeAttemptBudget, ThrottleError } from '../lib/throttle'
 import { shareAssetCookieName, verifyShareAssetSession } from '../lib/share-asset-session'
 import { requireAuth } from '../middleware/auth'
+import { verifyMcpApiKey } from '../mcp/api-keys'
+import { getMcpPreferences, isMcpEnabled, MCP_SCOPES } from '../mcp/settings'
 
 export const filesRoutes = new Hono<AppBindings>()
 
@@ -140,8 +142,11 @@ async function collectAttachmentIdsThroughBoundary(
 }
 
 
-filesRoutes.post('/', requireAuth, async (c) => {
-  const userId = c.get('userId')
+async function uploadAttachment(
+  c: Context<AppBindings>,
+  userId: string,
+  mcpMediaOnly = false,
+): Promise<Response> {
   try {
     await consumeAttemptBudget(c.env.DB, [{
       key: `attachment-upload:${userId}`,
@@ -171,9 +176,19 @@ filesRoutes.post('/', requireAuth, async (c) => {
   }
 
   const bytes = new Uint8Array(await file.arrayBuffer())
+  if (mcpMediaOnly) {
+    const detectedMime = safeAttachmentMime(bytes, file.type)
+    if (detectedMime === 'image/gif') {
+      throw ApiError.badRequest('GIF attachments are not supported by this endpoint')
+    }
+    if (!detectedMime.startsWith('image/') && !detectedMime.startsWith('video/')) {
+      throw ApiError.badRequest('Only supported image and video attachments can be uploaded')
+    }
+  }
   const id = newId()
   const rawNoteId = form.get('noteId')
   const noteId = typeof rawNoteId === 'string' && rawNoteId ? rawNoteId.slice(0, 128) : null
+  if (mcpMediaOnly && !noteId) throw ApiError.badRequest('Missing noteId field')
   if (noteId) {
     const owned = await c.env.DB.prepare(
       `SELECT id FROM notes WHERE id = ?1 AND user_id = ?2 AND deleted_at IS NULL`,
@@ -205,6 +220,29 @@ filesRoutes.post('/', requireAuth, async (c) => {
     createdAt: now,
   }
   return c.json(attachment, 201)
+}
+
+async function authenticateMcpUpload(c: Context<AppBindings>): Promise<string> {
+  const authorization = c.req.header('Authorization')?.trim() ?? ''
+  const match = /^Bearer\s+(.+)$/i.exec(authorization)
+  const auth = match ? await verifyMcpApiKey(c.env.DB, match[1]!) : null
+  if (!auth) throw ApiError.unauthenticated('The Inkstone API key is invalid or revoked')
+  if (!await isMcpEnabled(c.env.DB)) {
+    throw ApiError.forbidden('MCP access is disabled')
+  }
+  const preferences = await getMcpPreferences(c.env.DB, auth.userId)
+  if (!auth.scopes.includes(MCP_SCOPES.write) || !preferences.writeEnabled) {
+    throw ApiError.forbidden('OAuth scope required: notes:write')
+  }
+  return auth.userId
+}
+
+filesRoutes.post('/', requireAuth, async (c) => {
+  return uploadAttachment(c, c.get('userId'))
+})
+
+filesRoutes.post('/mcp', async (c) => {
+  return uploadAttachment(c, await authenticateMcpUpload(c), true)
 })
 
 
