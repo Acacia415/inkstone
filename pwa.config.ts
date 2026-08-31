@@ -146,7 +146,7 @@ self.addEventListener('message', (event) => {
     return
   }
   if (event.data?.type === 'WARM_OFFLINE_CACHE') {
-    event.waitUntil(warmOfflineCache(true))
+    event.waitUntil(warmOfflineCache(false))
   }
 })
 
@@ -218,18 +218,35 @@ function warmOfflineCache(notifyWhenComplete) {
 async function runOfflineWarmup(notifyWhenComplete) {
   const assets = await caches.open(ASSET_CACHE)
   if (await assets.match(CURRENT_MANIFEST_URL)) {
-    await broadcastStatus('ready', CORE_URLS.length, CORE_URLS.length, false)
+    await broadcastStatus('ready', ALL_OFFLINE_URLS.length, ALL_OFFLINE_URLS.length, false)
     return
   }
-  // Downgraded warmup: only core is cached eagerly. Optional assets (190+ chunks)
-  // are cached on-demand via the fetch handler above, avoiding 9 MB prefetch
-  // that previously saturated the network on first load.
+  let completed = await countAvailable()
+  let processed = 0
+  await broadcastStatus('preparing', completed, ALL_OFFLINE_URLS.length, false)
+
   try {
+    // Fill the complete offline cache quietly after the app is ready. A single
+    // request at a time plus a short yield keeps foreground traffic responsive.
+    await forEachConcurrent(OPTIONAL_URLS, 1, async (url) => {
+      if (isImmutableAsset(url) && await assets.match(url)) return
+      const reused = isImmutableAsset(url)
+        ? await caches.match(url, { ignoreSearch: true })
+        : null
+      const response = reused || await fetchRequired(url)
+      await assets.put(url, response.clone())
+      if (!reused) completed++
+      processed++
+      if (processed % 8 === 0) {
+        await broadcastStatus('preparing', completed, ALL_OFFLINE_URLS.length, false)
+      }
+      await pauseBackgroundWarmup()
+    })
     await writeCurrentManifest(assets)
     await pruneAssetCache(assets)
-    await broadcastStatus('ready', CORE_URLS.length, CORE_URLS.length, notifyWhenComplete)
+    await broadcastStatus('ready', ALL_OFFLINE_URLS.length, ALL_OFFLINE_URLS.length, notifyWhenComplete)
   } catch (error) {
-    await broadcastStatus('error', CORE_URLS.length, CORE_URLS.length, false)
+    await broadcastStatus('error', await countAvailable(), ALL_OFFLINE_URLS.length, false)
     throw error
   }
 }
@@ -237,17 +254,15 @@ async function runOfflineWarmup(notifyWhenComplete) {
 async function reportOfflineStatus(target) {
   const assets = await caches.open(ASSET_CACHE)
   const complete = Boolean(await assets.match(CURRENT_MANIFEST_URL))
-  // After downgrade, "total" reflects core assets only — optional are on-demand.
-  const total = CORE_URLS.length
-  const completed = complete ? total : await countAvailable()
-  const message = statusMessage(complete ? 'ready' : 'preparing', completed, total, false)
+  const completed = complete ? ALL_OFFLINE_URLS.length : await countAvailable()
+  const message = statusMessage(complete ? 'ready' : 'preparing', completed, ALL_OFFLINE_URLS.length, false)
   if (target && 'postMessage' in target) target.postMessage(message)
   else await broadcast(message)
 }
 
 async function countAvailable() {
   let count = 0
-  await forEachConcurrent(CORE_URLS, 8, async (url) => {
+  await forEachConcurrent(ALL_OFFLINE_URLS, 8, async (url) => {
     if (await caches.match(url, { ignoreSearch: true })) count++
   })
   return count
@@ -293,6 +308,10 @@ async function fetchRequired(url) {
   const response = await fetch(url)
   if (!response.ok) throw new Error('Failed to cache ' + url + ': HTTP ' + response.status)
   return response
+}
+
+function pauseBackgroundWarmup() {
+  return new Promise((resolve) => setTimeout(resolve, 75))
 }
 
 function isImmutableAsset(url) {
