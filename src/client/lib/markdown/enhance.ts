@@ -1,206 +1,8 @@
-
-
-
 import { decodeDataValue } from './data-attr';
 import { t } from "../i18n";
 
-type Highlighter = {
-    codeToHtml: (code: string, options: Record<string, unknown>) => string;
-    getBundledLanguages: () => Record<string, unknown>;
-    getLoadedLanguages: () => string[];
-    loadLanguage: (lang: unknown) => Promise<void>;
-};
 const OPTIONAL_RENDERER_LOAD_TIMEOUT_MS = 15000;
 
-
-const SHIKI_LANGUAGES = {
-    bash: () => import('@shikijs/langs/bash'),
-    c: () => import('@shikijs/langs/c'),
-    cpp: () => import('@shikijs/langs/cpp'),
-    csharp: () => import('@shikijs/langs/csharp'),
-    css: () => import('@shikijs/langs/css'),
-    dart: () => import('@shikijs/langs/dart'),
-    diff: () => import('@shikijs/langs/diff'),
-    docker: () => import('@shikijs/langs/docker'),
-    dotenv: () => import('@shikijs/langs/dotenv'),
-    go: () => import('@shikijs/langs/go'),
-    graphql: () => import('@shikijs/langs/graphql'),
-    html: () => import('@shikijs/langs/html'),
-    ini: () => import('@shikijs/langs/ini'),
-    java: () => import('@shikijs/langs/java'),
-    javascript: () => import('@shikijs/langs/javascript'),
-    json: () => import('@shikijs/langs/json'),
-    jsonc: () => import('@shikijs/langs/jsonc'),
-    jsx: () => import('@shikijs/langs/jsx'),
-    kotlin: () => import('@shikijs/langs/kotlin'),
-    less: () => import('@shikijs/langs/less'),
-    markdown: () => import('@shikijs/langs/markdown'),
-    nginx: () => import('@shikijs/langs/nginx'),
-    php: () => import('@shikijs/langs/php'),
-    powershell: () => import('@shikijs/langs/powershell'),
-    python: () => import('@shikijs/langs/python'),
-    ruby: () => import('@shikijs/langs/ruby'),
-    rust: () => import('@shikijs/langs/rust'),
-    scss: () => import('@shikijs/langs/scss'),
-    sql: () => import('@shikijs/langs/sql'),
-    svelte: () => import('@shikijs/langs/svelte'),
-    swift: () => import('@shikijs/langs/swift'),
-    toml: () => import('@shikijs/langs/toml'),
-    tsx: () => import('@shikijs/langs/tsx'),
-    typescript: () => import('@shikijs/langs/typescript'),
-    vue: () => import('@shikijs/langs/vue'),
-    xml: () => import('@shikijs/langs/xml'),
-    yaml: () => import('@shikijs/langs/yaml'),
-} as const;
-const SHIKI_THEMES = {
-    'github-light': () => import('@shikijs/themes/github-light'),
-    'github-dark-dimmed': () => import('@shikijs/themes/github-dark-dimmed'),
-} as const;
-const PRELOADED_LANGUAGES = [
-    'javascript',
-    'typescript',
-    'json',
-    'bash',
-    'markdown',
-] as const;
-let highlighterPromise: Promise<Highlighter> | null = null;
-const loadingLanguages = new Map<string, Promise<boolean>>();
-const highlightedCodeCache = new Map<string, string>();
-const LANG_ALIASES: Record<string, string> = {
-    js: 'javascript',
-    ts: 'typescript',
-    jsx: 'jsx',
-    tsx: 'tsx',
-    sh: 'bash',
-    shell: 'bash',
-    zsh: 'bash',
-    yml: 'yaml',
-    py: 'python',
-    rb: 'ruby',
-    cs: 'csharp',
-    'c++': 'cpp',
-    'c#': 'csharp',
-    golang: 'go',
-    md: 'markdown',
-    ps1: 'powershell',
-    dockerfile: 'docker',
-    htm: 'html',
-    html5: 'html',
-    json5: 'jsonc',
-    gql: 'graphql',
-    kt: 'kotlin',
-    rs: 'rust',
-    env: 'dotenv',
-    conf: 'ini',
-};
-async function getHighlighter(): Promise<Highlighter | null> {
-    if (!highlighterPromise) {
-        const loading = withTimeout((async () => {
-            const [{ createBundledHighlighter }, { createJavaScriptRegexEngine }] = await Promise.all([
-                import('@shikijs/core'),
-                import('@shikijs/engine-javascript'),
-            ]);
-            const createHighlighter = createBundledHighlighter({
-                langs: SHIKI_LANGUAGES,
-                themes: SHIKI_THEMES,
-                engine: () => createJavaScriptRegexEngine(),
-            });
-            return (await createHighlighter({
-                themes: ['github-light', 'github-dark-dimmed'],
-                langs: [...PRELOADED_LANGUAGES],
-            })) as unknown as Highlighter;
-        })(), OPTIONAL_RENDERER_LOAD_TIMEOUT_MS, t("markdown.code_highlighting_timed_out_while_loading"));
-        highlighterPromise = loading;
-        void loading.catch((err) => {
-            if (highlighterPromise === loading)
-                highlighterPromise = null;
-            console.warn(t("markdown.inkstone_code_highlighting_failed_showing_plain_text"), err);
-        });
-    }
-    try {
-        return await highlighterPromise;
-    }
-    catch {
-        return null;
-    }
-}
-async function ensureLanguage(highlighter: Highlighter, lang: string): Promise<boolean> {
-    if (!lang)
-        return false;
-    const requested = lang.trim().toLowerCase();
-    const normalized = LANG_ALIASES[requested] ?? requested;
-    if (highlighter.getLoadedLanguages().includes(normalized))
-        return true;
-    let pending = loadingLanguages.get(normalized);
-    if (!pending) {
-        pending = (async () => {
-            try {
-                const loader = highlighter.getBundledLanguages()[normalized];
-                if (!loader)
-                    return false;
-                await highlighter.loadLanguage(loader);
-                return true;
-            }
-            catch {
-                return false;
-            }
-        })();
-        loadingLanguages.set(normalized, pending);
-        void pending.then((loaded) => {
-            if (!loaded && loadingLanguages.get(normalized) === pending) {
-                loadingLanguages.delete(normalized);
-            }
-        });
-    }
-    return pending;
-}
-async function highlightCodeBlocks(root: HTMLElement): Promise<void> {
-    const pending = [...root.querySelectorAll<HTMLElement>('.code-block')]
-        .map((block) => {
-        const pre = block.querySelector<HTMLElement>('pre.shiki-pending');
-        const code = pre?.textContent ?? '';
-        const lang = block.dataset.lang ?? '';
-        const requested = lang.trim().toLowerCase();
-        const key = `${LANG_ALIASES[requested] ?? requested}\u0000${code}`;
-        return pre ? { block, pre, code, lang, key } : null;
-    })
-        .filter((item): item is NonNullable<typeof item> => item !== null);
-    for (let index = pending.length - 1; index >= 0; index--) {
-        const item = pending[index]!;
-        const cached = highlightedCodeCache.get(item.key);
-        if (!cached)
-            continue;
-        item.pre.outerHTML = cached;
-        decorateCodeBlock(item.block);
-        pending.splice(index, 1);
-    }
-    if (!pending.length)
-        return;
-    const highlighter = await getHighlighter();
-    if (!highlighter) {
-        pending.forEach(({ block }) => {
-            decorateCodeBlock(block);
-        });
-        return;
-    }
-    for (const { block, pre, code, lang, key } of pending) {
-        const ok = lang ? await ensureLanguage(highlighter, lang) : false;
-        const requested = lang.trim().toLowerCase();
-        try {
-            const html = highlighter.codeToHtml(code, {
-                lang: ok ? (LANG_ALIASES[requested] ?? requested) : 'text',
-                themes: { light: 'github-light', dark: 'github-dark-dimmed' },
-                defaultColor: 'light',
-            });
-            remember(highlightedCodeCache, key, html, 180);
-            pre.outerHTML = html;
-            decorateCodeBlock(block);
-        }
-        catch {
-            decorateCodeBlock(block);
-        }
-    }
-}
 export function decorateCodeBlock(block: HTMLElement): void {
     const pre = block.querySelector<HTMLElement>('pre');
     const code = pre?.querySelector<HTMLElement>('code');
@@ -300,8 +102,9 @@ const mathCache = new Map<string, string>();
 async function getKatex(): Promise<KatexLike | null> {
     if (!katexPromise) {
         const loading = withTimeout((async () => {
-            const [katex] = await Promise.all([import('katex'), import('katex/dist/katex.min.css')]);
-            return (katex.default ?? katex) as unknown as KatexLike;
+            const mod = await import('../katex-loader')
+            const katex = (mod.default ?? mod) as unknown as KatexLike
+            return katex
         })(), OPTIONAL_RENDERER_LOAD_TIMEOUT_MS, t("markdown.math_rendering_timed_out_while_loading"));
         katexPromise = loading;
         void loading.catch((err) => {
@@ -585,8 +388,9 @@ export async function enhancePreview(root: HTMLElement, options: EnhanceOptions)
     }
     if (!options.math)
         showMathSource(root);
+    // Code highlighting removed: just decorate plain code blocks
+    root.querySelectorAll<HTMLElement>('.code-block').forEach((block) => decorateCodeBlock(block));
     await Promise.allSettled([
-        highlightCodeBlocks(root),
         options.math ? renderMath(root) : Promise.resolve(),
     ]);
     configureCodeBlockCollapsing(root, options.codeBlockCollapseLines ?? 24);

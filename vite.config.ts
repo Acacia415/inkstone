@@ -12,14 +12,12 @@ const normalizeModuleId = (id: string) => id.replace(/\\/g, '/')
 
 const preservesOnDemandBoundary = (id: string) => {
   const path = normalizeModuleId(id)
-
+  // No syntax highlighting: only preserve mermaid heavy deps and non-common lezer grammars
   return (
-    /\/node_modules\/@shikijs\/(?:langs|themes)\//.test(path) ||
-    /\/node_modules\/@codemirror\/(?:lang-[^/]+|legacy-modes)\//.test(path) ||
-    /\/node_modules\/@lezer\/(?!common\/|highlight\/|lr\/|markdown\/)/.test(path) ||
     /\/node_modules\/(?:mermaid|@mermaid-js\/[^/]+|cytoscape|cytoscape-cose-bilkent|elkjs|dagre-d3-es|d3-[^/]+)\//.test(
       path,
-    )
+    ) ||
+    /\/node_modules\/@lezer\/(?!common\/|highlight\/|lr\/|markdown\/)/.test(path)
   )
 }
 
@@ -30,7 +28,7 @@ const isReactModule = (id: string) => {
   const path = normalizeModuleId(id)
   return (
     path.includes('/node_modules/') &&
-    /react-dom|\/react\/|scheduler|use-sync-external-store/.test(path)
+    /react-dom|\/react\/|scheduler|use-sync-external-store|zustand/.test(path)
   )
 }
 
@@ -61,8 +59,7 @@ const getVendorChunkName = (id: string) => {
 
   const path = normalizeModuleId(id)
 
-  if (path.includes('/katex/')) return 'vendor-katex'
-  if (/shiki|@shikijs|oniguruma/.test(path)) return 'vendor-shiki'
+  if (path.includes('/katex/') && !path.includes('.css')) return 'vendor-katex'
   if (/@codemirror|@lezer|crelt|style-mod|w3c-keyname/.test(path)) return 'vendor-editor'
   if (/markdown-it|mdurl|entities|linkify-it|punycode|uc\.micro/.test(path)) {
     return 'vendor-markdown'
@@ -89,10 +86,11 @@ const config: UserConfigFnPromise = async ({ mode, command }) => ({
   ],
 
   resolve: {
-    alias: {
-      '@': r('./src/client'),
-      '@shared': r('./src/shared'),
-    },
+    alias: [
+      { find: /^katex$/, replacement: r('./node_modules/katex/dist/katex.mjs') },
+      { find: '@', replacement: r('./src/client') },
+      { find: '@shared', replacement: r('./src/shared') },
+    ],
   },
 
   server: {
@@ -109,19 +107,24 @@ const config: UserConfigFnPromise = async ({ mode, command }) => ({
     ...(mode === 'demo' ? { outDir: 'dist/demo' } : {}),
     target: 'esnext',
     sourcemap: false,
-    chunkSizeWarningLimit: 900,
+    chunkSizeWarningLimit: 250,
+    cssMinify: 'lightningcss',
     rolldownOptions: {
       checks: {
         pluginTimings: false,
       },
       output: {
+        minify: true,
         codeSplitting: {
           groups: [
             {
-
-
               name: 'vendor-mermaid-parsers',
               test: isMermaidParserLoader,
+              priority: 45,
+            },
+            {
+              name: 'vendor-react',
+              test: (id) => isReactModule(id),
               priority: 40,
             },
             {
@@ -131,19 +134,16 @@ const config: UserConfigFnPromise = async ({ mode, command }) => ({
               priority: 35,
             },
             {
-              name: 'vendor-react',
-              test: (id) => isLucideModule(id) || isReactModule(id),
-              tags: ['$initial'],
+              name: 'vendor-katex',
+              test: (id) => (id === 'katex' || normalizeModuleId(id).includes('/katex/')) && !id.includes('.css'),
               priority: 30,
             },
             {
-              name: 'vendor-icons-lazy',
+              name: 'vendor-icons',
               test: isLucideModule,
               priority: 25,
             },
             {
-
-
               name: getVendorChunkName,
               priority: 20,
             },

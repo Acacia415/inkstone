@@ -12,10 +12,10 @@ import { useSession } from '../../store/session';
 import { useUpdate } from '../../store/update';
 import { Sidebar } from '../sidebar/Sidebar';
 import { NoteList } from '../list/NoteList';
-import { Workspace } from '../workspace/Workspace';
 import { FloatingSearch } from './FloatingSearch';
 import { Resizer, SplitResizer } from './Resizer';
 import { t } from "../../lib/i18n";
+const Workspace = lazy(() => import('../workspace/Workspace').then((m) => ({ default: m.Workspace })));
 const CommandPalette = lazy(() => import('../command/CommandPalette').then((m) => ({ default: m.CommandPalette })));
 const SettingsPanel = lazy(() => import('../settings/SettingsPanel').then((m) => ({ default: m.SettingsPanel })));
 const ShortcutsPanel = lazy(() => import('../command/ShortcutsPanel').then((m) => ({ default: m.ShortcutsPanel })));
@@ -94,7 +94,8 @@ export function AppShell() {
           </>)}
 
         <main ref={workspaceGroupsRef} className="flex min-w-0 flex-1">
-          {showWorkspaceSplit ? (<>
+          <Suspense fallback={<WorkspaceFallback />}>
+            {showWorkspaceSplit ? (<>
               <div className="min-w-0" style={{ width: `${effectiveWorkspaceSplitRatio * 100}%` }}>
                 <InlineErrorBoundary><Workspace pane="primary" grouped/></InlineErrorBoundary>
               </div>
@@ -105,6 +106,7 @@ export function AppShell() {
             </>) : (<div className="min-w-0 flex-1">
                 <InlineErrorBoundary><Workspace /></InlineErrorBoundary>
               </div>)}
+          </Suspense>
         </main>
       </div>
 
@@ -144,7 +146,7 @@ function MobileShell() {
           <NoteList />
         </div>
         <div aria-hidden={!notePane} inert={!notePane} data-active={notePane || undefined} data-from="right" className="mobile-pane-layer absolute inset-0">
-          {notePane && activeNoteId && (<Workspace mobileLayout={pane === 'preview' ? 'preview' : 'edit'} onMobileBack={() => setPane('list')}/>) }
+          {notePane && activeNoteId && (<Suspense fallback={<WorkspaceFallback />}><Workspace mobileLayout={pane === 'preview' ? 'preview' : 'edit'} onMobileBack={() => setPane('list')}/></Suspense>) }
         </div>
       </div>
 
@@ -160,6 +162,14 @@ function MobileShell() {
       <OverlayHost />
     </div>);
 }
+function WorkspaceFallback() {
+    return (
+        <div className="flex h-full items-center justify-center bg-[var(--bg-editor)] text-[var(--text-tertiary)] text-sm">
+            {t("common.loading")}
+        </div>
+    );
+}
+
 function OverlayHost() {
     const panel = useUi((s) => s.panel);
     const closePanel = useUi((s) => s.closePanel);

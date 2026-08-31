@@ -1,19 +1,23 @@
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
+import { initI18n } from '../i18n'
 import { configureCodeBlockCollapsing, decorateCodeBlock, enhancePreview, toggleCodeBlockCollapse } from './enhance'
 
+beforeAll(async () => {
+  await initI18n()
+})
+
 describe('code block collapsing', () => {
-  it('keeps Shiki syntax highlighting when collapsing a TypeScript block', async () => {
+  it('keeps plain code blocks without syntax highlighting', async () => {
     const root = document.createElement('div')
-    root.innerHTML = '<div class="code-block" data-lang="typescript"><div class="code-block-head"><span class="code-title">typescript</span><button data-copy type="button">Copy</button></div><pre class="shiki-pending"><code>const answer: number = 42</code></pre></div>'
+    root.innerHTML = '<div class="code-block" data-lang="typescript"><div class="code-block-head"><span class="code-title">typescript</span><button data-copy type="button">Copy</button></div><pre><code>const answer: number = 42</code></pre></div>'
 
     await enhancePreview(root, { math: false, mermaid: false, dark: false, codeBlockCollapseLines: 8 })
 
-    expect(root.querySelector('pre')!.classList.contains('shiki')).toBe(true)
-    const tokens = [...root.querySelectorAll<HTMLElement>('.line span')]
-    expect(tokens.length).toBeGreaterThan(1)
-    expect(tokens[0]!.style.color).not.toBe('')
-    expect(tokens[0]!.style.color).not.toBe(tokens[1]!.style.color)
-    expect(tokens[0]!.style.getPropertyValue('--shiki-dark')).not.toBe('')
+    expect(root.querySelector('pre')!.classList.contains('shiki')).toBe(false)
+    const lines = [...root.querySelectorAll<HTMLElement>('.line')]
+    expect(lines.length).toBeGreaterThan(0)
+    // No syntax colors without highlighter - plain lines have no inner spans with styles
+    expect(root.querySelector('.line span')).toBeNull()
   })
 
   it('collapses long blocks and restores their full height when expanded', () => {

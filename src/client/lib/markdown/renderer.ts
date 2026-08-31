@@ -512,7 +512,7 @@ md.renderer.rules.fence = (tokens, index, _options, rendererEnv) => {
             `<section class="markdown-example-source" aria-label="Markdown">`,
             `<div class="code-block markdown-example-code" data-lang="markdown" data-code-start="1">`,
             `<button class="code-copy markdown-example-copy" data-copy type="button" aria-label="${escapeAttr(t("markdown.copy_code"))}">${escapeHtml(t("common.copy"))}</button>`,
-            `<pre class="shiki-pending"><code>${escapeHtml(token.content)}</code></pre>`,
+            `<pre><code>${escapeHtml(token.content)}</code></pre>`,
             `</div>`,
             `</section>`,
             `</div>`,
@@ -537,7 +537,7 @@ md.renderer.rules.fence = (tokens, index, _options, rendererEnv) => {
         info.title && info.language ? `<span class="code-lang">${escapeHtml(info.language)}</span>` : '',
         `<button class="code-copy" data-copy type="button" aria-label="${escapeAttr(t("markdown.copy_code"))}">${escapeHtml(t("common.copy"))}</button>`,
         `</div>`,
-        `<pre class="shiki-pending"><code>${escapeHtml(token.content)}</code></pre>`,
+        `<pre><code>${escapeHtml(token.content)}</code></pre>`,
         `</div>`,
     ].join('');
 };
