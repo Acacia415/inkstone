@@ -33,13 +33,6 @@ const isReactModule = (id: string) => {
   )
 }
 
-const isMermaidParserLoader = (id: string) => {
-  const path = normalizeModuleId(id)
-  return /\/node_modules\/@mermaid-js\/parser\/dist\/chunks\/mermaid-parser\.core\/(?:architecture|cynefin|eventmodeling|gitGraph|info|packet|pie|radar|railroad(?:-(?:abnf|ebnf|peg))?|treemap|treeView|wardley)-[^/]+\.mjs$/i.test(
-    path,
-  )
-}
-
 const katexWoff2Only = (): Plugin => ({
   name: 'inkstone:katex-woff2-only',
   enforce: 'pre',
@@ -118,11 +111,6 @@ const config: UserConfigFnPromise = async ({ mode, command }) => ({
         minify: true,
         codeSplitting: {
           groups: [
-            {
-              name: 'vendor-mermaid-parsers',
-              test: isMermaidParserLoader,
-              priority: 45,
-            },
             {
               name: 'vendor-react',
               test: (id) => isReactModule(id),

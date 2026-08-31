@@ -849,19 +849,6 @@
 }
 
 
-.ink-prose dl {
-  margin: 0.8em 0;
-}
-.ink-prose dt {
-  font-weight: 620;
-  margin-top: 0.6em;
-}
-.ink-prose dd {
-  margin: 0.15em 0 0 1.1em;
-  color: var(--text-secondary);
-}
-
-
 .ink-prose mark {
   background: color-mix(in oklab, var(--warning) 26%, transparent);
   color: var(--text-primary);
@@ -879,11 +866,6 @@
   color: var(--text-secondary);
   white-space: nowrap;
 }
-.ink-prose ins {
-  text-decoration: underline;
-  text-decoration-style: solid;
-  text-decoration-color: var(--success);
-}
 .ink-prose del {
   color: var(--text-tertiary);
 }
@@ -891,12 +873,6 @@
   text-decoration: underline dotted;
   cursor: help;
 }
-.ink-prose sub,
-.ink-prose sup {
-  font-size: 0.74em;
-}
-
-
 .ink-prose .katex {
   font-size: 1.04em;
 }
