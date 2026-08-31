@@ -12,12 +12,13 @@ const normalizeModuleId = (id: string) => id.replace(/\\/g, '/')
 
 const preservesOnDemandBoundary = (id: string) => {
   const path = normalizeModuleId(id)
-  // No syntax highlighting: only preserve mermaid heavy deps and non-common lezer grammars
+  // Keep optional preview renderers and their language modules behind dynamic-import boundaries.
   return (
     /\/node_modules\/(?:mermaid|@mermaid-js\/[^/]+|cytoscape|cytoscape-cose-bilkent|elkjs|dagre-d3-es|d3-[^/]+)\//.test(
       path,
     ) ||
-    /\/node_modules\/@lezer\/(?!common\/|highlight\/|lr\/|markdown\/)/.test(path)
+    /\/node_modules\/@lezer\/(?!common\/|highlight\/|lr\/|markdown\/)/.test(path) ||
+    /\/node_modules\/prismjs\/components\/prism-(?!core(?:\.js)?$)/.test(path)
   )
 }
 

@@ -1,5 +1,6 @@
 import { decodeDataValue } from './data-attr';
 import { t } from "../i18n";
+import { highlightWithPrism } from './prism';
 
 const OPTIONAL_RENDERER_LOAD_TIMEOUT_MS = 15000;
 
@@ -10,13 +11,16 @@ export function decorateCodeBlock(block: HTMLElement): void {
         return;
     let lines = [...code.querySelectorAll<HTMLElement>(':scope > .line')];
     if (!lines.length) {
-        const source = code.textContent ?? '';
+        const values = splitNodesAtNewlines([...code.childNodes]);
+        if ((code.textContent ?? '').endsWith('\n'))
+            values.pop();
         code.replaceChildren();
-        const values = source.replace(/\n$/, '').split('\n');
         values.forEach((value, index) => {
             const line = document.createElement('span');
             line.className = 'line';
-            line.textContent = value || ' ';
+            line.append(...value);
+            if (!line.textContent)
+                line.textContent = ' ';
             code.append(line);
             if (index < values.length - 1)
                 code.append('\n');
@@ -34,6 +38,53 @@ export function decorateCodeBlock(block: HTMLElement): void {
         line.dataset.lineNumber = String(start + index);
         line.classList.toggle('highlighted', highlighted.has(index + 1));
     });
+}
+
+function splitNodesAtNewlines(nodes: Node[]): Node[][] {
+    const lines: Node[][] = [[]];
+    for (const node of nodes) {
+        const parts = splitNodeAtNewlines(node);
+        lines[lines.length - 1]!.push(...parts[0]!);
+        for (let index = 1; index < parts.length; index++)
+            lines.push(parts[index]!);
+    }
+    return lines;
+}
+
+function splitNodeAtNewlines(node: Node): Node[][] {
+    if (node.nodeType === Node.TEXT_NODE)
+        return (node.textContent ?? '').split('\n').map((text) => [document.createTextNode(text)]);
+    if (!(node instanceof HTMLElement))
+        return [[node.cloneNode(true)]];
+    return splitNodesAtNewlines([...node.childNodes]).map((children) => {
+        const clone = node.cloneNode(false) as HTMLElement;
+        clone.append(...children);
+        return [clone];
+    });
+}
+
+async function highlightCodeBlocks(root: HTMLElement): Promise<void> {
+    await Promise.all([...root.querySelectorAll<HTMLElement>('.code-block')].map(async (block) => {
+        const code = block.querySelector<HTMLElement>(':scope > pre > code');
+        if (!code)
+            return;
+        const source = (code.textContent ?? '').replace(/\n$/, '');
+        try {
+            const highlighted = await highlightWithPrism(source, block.dataset.lang ?? '');
+            if (highlighted) {
+                code.innerHTML = highlighted.html;
+                code.classList.add(`language-${highlighted.language}`);
+            }
+            else {
+                code.textContent = source;
+            }
+        }
+        catch (err) {
+            code.textContent = source;
+            console.warn(t("markdown.inkstone_code_highlighting_failed_showing_plain_text"), err);
+        }
+        decorateCodeBlock(block);
+    }));
 }
 let generatedCodeBlockId = 0;
 
@@ -388,9 +439,8 @@ export async function enhancePreview(root: HTMLElement, options: EnhanceOptions)
     }
     if (!options.math)
         showMathSource(root);
-    // Code highlighting removed: just decorate plain code blocks
-    root.querySelectorAll<HTMLElement>('.code-block').forEach((block) => decorateCodeBlock(block));
     await Promise.allSettled([
+        highlightCodeBlocks(root),
         options.math ? renderMath(root) : Promise.resolve(),
     ]);
     configureCodeBlockCollapsing(root, options.codeBlockCollapseLines ?? 24);

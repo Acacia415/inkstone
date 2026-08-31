@@ -50,3 +50,10 @@ declare module 'markdown-it-multimd-table' {
 }
 
 declare module 'katex/dist/katex.min.css'
+
+declare module 'prismjs/components/prism-core' {
+  import Prism from 'prismjs'
+  export default Prism
+}
+
+declare module 'prismjs/components/*'
