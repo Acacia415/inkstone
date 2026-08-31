@@ -6,6 +6,7 @@ import { useBreakpoint } from '../../lib/hooks';
 import { useSyncEngine } from '../../lib/sync';
 import { Drawer } from '../../components/overlay';
 import { InlineErrorBoundary } from '../../components/ErrorBoundary';
+import { EditorSkeleton } from '../../components/feedback';
 import { PANEL_WIDTHS, useUi } from '../../store/ui';
 import { createContextualNote, useNotes } from '../../store/notes';
 import { useSession } from '../../store/session';
@@ -164,8 +165,12 @@ function MobileShell() {
 }
 function WorkspaceFallback() {
     return (
-        <div className="flex h-full items-center justify-center bg-[var(--bg-editor)] text-[var(--text-tertiary)] text-sm">
-            {t("common.loading")}
+        <div
+            className="h-full min-w-0 flex-1 overflow-hidden bg-[var(--bg-editor)]"
+            aria-busy="true"
+            aria-label={t("workspace.loading_note_content")}
+        >
+            <EditorSkeleton />
         </div>
     );
 }
