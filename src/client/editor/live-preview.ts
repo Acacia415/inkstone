@@ -69,7 +69,6 @@ class RenderedBlock extends WidgetType {
                     .catch(() => useUi.getState().toast({ title: t('preview.could_not_copy'), tone: 'danger' }));
                 return;
             }
-            if (target.closest('summary')) return;
             const wiki = target.closest<HTMLElement>('[data-wikilink]');
             if (wiki && (event.metaKey || event.ctrlKey)) {
                 event.preventDefault();

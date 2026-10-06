@@ -651,7 +651,12 @@ export function renderMarkdownBlocks(source: string): { blocks: MarkdownBlock[];
             let depth = 1;
             while (end < tokens.length && depth > 0) depth += tokens[end++]!.nesting;
         }
-        const raw = md.renderer.render(tokens.slice(i, end), md.options, env);
+        const blockTokens = tokens.slice(i, end);
+        if (blockTokens.some((part) => part.type === 'html_block')) {
+            i = end - 1;
+            continue;
+        }
+        const raw = md.renderer.render(blockTokens, md.options, env);
         const html = materializeTrustedTasks(DOMPurify.sanitize(raw, PURIFY_CONFIG), env.taskNonce);
         if (html.trim()) blocks.push({ startLine: token.map[0], endLine: token.map[1], html });
         i = end - 1;
